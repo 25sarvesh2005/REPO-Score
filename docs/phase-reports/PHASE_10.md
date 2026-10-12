@@ -108,4 +108,4 @@ New tests added: 28 focused unit and integration tests.
 ## 7. Resulting Git Commit Gate
 
 - **Required Commit Message:** `phase(10): implement deterministic scoring`
-- **Resulting Commit SHA:** `PENDING_COMMIT`
+- **Resulting Commit SHA:** `3f42778`
