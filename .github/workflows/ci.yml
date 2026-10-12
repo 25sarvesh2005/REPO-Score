@@ -1,0 +1,167 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+# Least privilege security policy: read-only access to prevent unauthorized token misuse
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-types:
+    name: Code Quality & Static Typing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Linting & Typing Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+
+      - name: Run Ruff Lint Checks
+        run: |
+          ruff check backend/ tests/ scripts/
+
+      - name: Run Ruff Format Check
+        run: |
+          ruff format --check backend/ tests/ scripts/
+
+      - name: Run Mypy Type Analysis
+        run: |
+          mypy backend/
+
+  security-audit:
+    name: Dependency & Secret Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Security Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: Run pip-audit on Declared Dependencies
+        run: |
+          pip install -e .
+          pip-audit --desc on
+
+  test-suite:
+    name: Automated Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reposcore_user
+          POSTGRES_PASSWORD: reposcore_pass
+          POSTGRES_DB: reposcore_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install Project & Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Execute Full Pytest Suite with Coverage
+        env:
+          APP_ENV: testing
+          DATABASE_URL: postgresql+asyncpg://reposcore_user:reposcore_pass@localhost:5432/reposcore_db
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -m pytest --cov=backend --cov-report=xml --cov-report=term -v
+
+      - name: Upload Test Coverage Artifact
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+  database-migrations:
+    name: Database Migration Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Alembic & Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Verify Alembic Migration Heads
+        run: |
+          python -m alembic -c backend/database/alembic.ini heads
+
+  frontend-verification:
+    name: Static Assets & Frontend Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify Static Asset Files
+        run: |
+          test -f backend/static/index.html
+          test -f backend/static/css/dashboard.css
+          test -f backend/static/js/dashboard.js
+          echo "Frontend static files successfully verified."

@@ -33,7 +33,9 @@ wheels/
 # Testing & Coverage
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
+reports/
 .tox/
 .nox/
 

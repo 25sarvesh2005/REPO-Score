@@ -1,0 +1,83 @@
+name: Commit-Aware Regression Gate
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+# Least privilege security policy: read-only access
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-regression-gate:
+    name: Commit-Aware Regression Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code with Git History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for diffing commit ranges
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Determine Commit Range & Execute Regression Gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p reports
+          
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "Evaluating Pull Request diff: $PR_BASE_SHA -> $PR_HEAD_SHA"
+            python scripts/ci_regression_checker.py \
+              --base-sha "$PR_BASE_SHA" \
+              --head-sha "$PR_HEAD_SHA" \
+              --output-json reports/regression_report.json \
+              --output-md reports/regression_summary.md
+          else
+            # For direct push events
+            if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              PUSH_BASE="HEAD~1"
+            else
+              PUSH_BASE="$PUSH_BEFORE"
+            fi
+            echo "Evaluating Push diff: $PUSH_BASE -> $PUSH_SHA"
+            python scripts/ci_regression_checker.py \
+              --base-sha "$PUSH_BASE" \
+              --head-sha "$PUSH_SHA" \
+              --output-json reports/regression_report.json \
+              --output-md reports/regression_summary.md
+          fi
+
+      - name: Publish Step Summary to GitHub Actions
+        if: always()
+        run: |
+          if [ -f reports/regression_summary.md ]; then
+            cat reports/regression_summary.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Sanitized Regression Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-audit-reports
+          path: reports/
+          retention-days: 14
