@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from backend.observability.logger import correlation_id_ctx, get_logger
+from backend.observability.metrics import record_api_metric
 
 logger = get_logger("reposcore.api.access")
 
@@ -35,6 +36,14 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
             # Attach header to response
             response.headers["X-Correlation-ID"] = correlation_id
+
+            # Record Prometheus operational telemetry
+            record_api_metric(
+                method=request.method,
+                endpoint=request.url.path,
+                status_code=response.status_code,
+                duration_seconds=duration_ms / 1000.0,
+            )
 
             # Log request completion (skip health probes in high-frequency access logs if needed)
             if request.url.path not in ("/health", "/metrics"):

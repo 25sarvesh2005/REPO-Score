@@ -18,6 +18,7 @@ from backend.core.queue import IJobQueue, get_job_queue
 from backend.database.models import Evaluation
 from backend.database.session import AsyncSessionLocal
 from backend.observability.logger import get_logger
+from backend.observability.metrics import record_evaluation_metric
 from backend.pipeline.orchestrator import EvaluationPipelineOrchestrator
 
 logger = get_logger("reposcore.pipeline.worker")
@@ -100,6 +101,7 @@ class EvaluationWorker:
                     eval_rec.error_summary = f"Evaluation job exceeded timeout limit of {timeout} seconds."
                     eval_rec.completed_at = datetime.now(timezone.utc)
                     await session.commit()
+                record_evaluation_metric("timeout", timeout)
                 return False
 
             except Exception as exc:

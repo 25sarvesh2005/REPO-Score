@@ -22,6 +22,8 @@ SECRET_PATTERNS = [
     (re.compile(r"bearer\s+[a-zA-Z0-9_.\-~+/]{20,}", re.IGNORECASE), "Bearer [REDACTED_TOKEN]"),
     (re.compile(r"-----BEGIN[ A-Z0-9_-]+PRIVATE KEY-----.*?-----END[ A-Z0-9_-]+PRIVATE KEY-----", re.DOTALL), "[REDACTED_PRIVATE_KEY]"),
     (re.compile(r"postgres(ql)?://([^:]+):([^@]+)@", re.IGNORECASE), r"postgresql://\2:[REDACTED]@"),
+    (re.compile(r"redis(s)?://:([^@]+)@", re.IGNORECASE), r"redis\1://:[REDACTED]@"),
+    (re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+"), "[REDACTED_WEBHOOK_URL]"),
 ]
 
 

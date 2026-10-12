@@ -43,6 +43,12 @@ from backend.observability.logger import (
     evaluation_id_ctx,
     get_logger,
 )
+from backend.observability.metrics import (
+    record_ai_inference_metric,
+    record_evaluation_metric,
+    record_finding_metric,
+    record_step_metric,
+)
 from backend.pipeline.models import PipelineExecutionResult, StepExecutionLog, StepStatus
 from backend.repository.detector import detect_technologies_and_category
 from backend.repository.models import TechnologyDetectionResult
@@ -176,6 +182,13 @@ class EvaluationPipelineOrchestrator:
                 findings = await self.analyzer_registry.execute_all(snapshot_path, tech_stack=tech_stack)
                 all_evidence.extend(findings)
 
+                # Record metrics for discovered findings
+                for f in findings:
+                    record_finding_metric(
+                        severity=f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+                        category=f.category.value if hasattr(f.category, "value") else str(f.category),
+                    )
+
                 # Persist evidence records to database
                 for f in findings:
                     ev_row = Evidence(
@@ -281,12 +294,19 @@ class EvaluationPipelineOrchestrator:
                     return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
                 step_ai = await self._start_step(session, evaluation_id, EvaluationStatus.AI_INTERPRETATION, "AI_INTERPRETATION")
+                ai_t0 = time.monotonic()
                 try:
                     ai_result = await self.ai_service.interpret_evaluation(
                         scorecard=scorecard,
                         evidence_records=all_evidence,
                         detection=detection,
                         runtime=runtime_obs,
+                    )
+                    ai_duration_s = time.monotonic() - ai_t0
+                    record_ai_inference_metric(
+                        provider=getattr(self.ai_service.provider, "provider_name", "local"),
+                        model=getattr(self.ai_service.provider, "model_name", "default"),
+                        duration_seconds=ai_duration_s,
                     )
                     await self.ai_service.persist_analysis(session, evaluation_id, ai_result)
                     await self._complete_step(session, step_ai, StepStatus.SUCCESS, metadata={"is_fallback": ai_result.is_fallback})
@@ -308,6 +328,12 @@ class EvaluationPipelineOrchestrator:
                 evaluation.error_summary = f"Completed with partial evaluation: {partial_status}"
             else:
                 evaluation.status = EvaluationStatus.COMPLETED
+
+            # Record final evaluation metric
+            record_evaluation_metric(
+                status=evaluation.status.value,
+                duration_seconds=total_duration_ms / 1000.0,
+            )
 
             await self._publish_event(
                 evaluation_id,
@@ -334,6 +360,10 @@ class EvaluationPipelineOrchestrator:
             evaluation.completed_at = datetime.now(timezone.utc)
             evaluation.duration_ms = int((time.monotonic() - t0) * 1000)
             evaluation.error_summary = f"Catastrophic failure: {unhandled_exc}"
+            record_evaluation_metric(
+                status=EvaluationStatus.FAILED.value,
+                duration_seconds=evaluation.duration_ms / 1000.0,
+            )
             await session.commit()
             return self._build_result(evaluation, steps_executed, error_summary=str(unhandled_exc))
 
@@ -395,6 +425,23 @@ class EvaluationPipelineOrchestrator:
             step_db.error_message = error_message
             step_db.step_metadata = log.metadata
         await session.flush()
+
+        # Record operational step metric and structured telemetry log
+        record_step_metric(
+            step_name=log.step_name,
+            status=status.value,
+            duration_seconds=log.duration_ms / 1000.0,
+        )
+        logger.info(
+            f"Step '{log.step_name}' finished with status '{status.value}' ({log.duration_ms}ms)",
+            extra={"extra_data": {
+                "step": log.step_name,
+                "status": status.value,
+                "duration_ms": log.duration_ms,
+                "exit_code": exit_code,
+                "error_message": error_message,
+            }},
+        )
 
     async def _check_cancellation(
         self,

@@ -83,6 +83,12 @@ SUBSYSTEM_TEST_MAP: Dict[str, List[str]] = {
         "tests/integration/test_pipeline_e2e.py",
         "tests/integration/test_evaluation_routes.py",
     ],
+    "backend/observability": [
+        "tests/unit/test_logger.py",
+        "tests/unit/test_observability.py",
+        "tests/integration/test_correlation_middleware.py",
+        "tests/integration/test_health_routes.py",
+    ],
 }
 
 
