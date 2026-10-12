@@ -163,7 +163,7 @@ tests/unit/test_validator.py::test_reject_malicious_or_invalid_git_refs[aaaaaaaa
 ## 7. Commit Information
 
 - **Required Commit Message:** `phase(06): implement repository ingestion`
-- **Commit SHA:** Pending commit gate execution
+- **Commit SHA:** `930eea4591cf4ee5cab09519c5adb16d65b27a83`
 
 ---
 
