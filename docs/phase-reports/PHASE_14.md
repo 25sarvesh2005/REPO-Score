@@ -155,4 +155,4 @@ tests\unit\test_worker_evaluator.py ...                                  [100%]
 ## 8. Commit Verification
 
 - **Commit Message:** `phase(14): add adversarial and regression tests`
-- **Resulting Commit SHA:** [To be recorded post-commit]
+- **Resulting Commit SHA:** `ac7138e`
