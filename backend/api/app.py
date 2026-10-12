@@ -2,7 +2,8 @@
 FastAPI Application Factory.
 """
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncGenerator
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,8 @@ logger = get_logger("reposcore.api")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle management."""
     logger.info(f"Starting {settings.APP_NAME} in '{settings.APP_ENV}' environment...")
+    local_worker = None
+    local_worker_task = None
     if "sqlite" in settings.DATABASE_URL:
         from backend.database.base import TimestampedBase
         from backend.database.session import engine
@@ -34,8 +37,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         async with engine.begin() as conn:
             await conn.run_sync(TimestampedBase.metadata.create_all)
         logger.info("SQLite database tables initialized successfully.")
-    yield
-    logger.info(f"Shutting down {settings.APP_NAME}...")
+    if settings.REDIS_URL.startswith("memory://"):
+        # An in-memory queue belongs to this process, so a separate worker process
+        # cannot consume it. Local mode runs the same sandboxed orchestrator here.
+        from backend.pipeline.worker import EvaluationWorker
+
+        local_worker = EvaluationWorker(worker_id="local-api-worker")
+        local_worker_task = asyncio.create_task(local_worker.run_forever())
+        logger.info("Started in-process worker for local in-memory queue.")
+    try:
+        yield
+    finally:
+        if local_worker is not None:
+            local_worker.request_shutdown()
+        if local_worker_task is not None:
+            with suppress(asyncio.CancelledError):
+                await local_worker_task
+        logger.info(f"Shutting down {settings.APP_NAME}...")
 
 
 def create_app() -> FastAPI:

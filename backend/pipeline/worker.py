@@ -42,6 +42,7 @@ class EvaluationWorker:
         self.orchestrator = orchestrator or EvaluationPipelineOrchestrator(job_queue=self.job_queue)
         self.session_factory = session_factory or AsyncSessionLocal
         self._is_running = False
+        self._stop_event = asyncio.Event()
 
     async def process_job(self, payload: Dict[str, Any]) -> bool:
         """
@@ -122,8 +123,43 @@ class EvaluationWorker:
         Poll and execute a single job from the queue (non-blocking or single pass).
         Useful for integration testing and deterministic test runners.
         """
-        # If using InMemoryJobQueue
-        if hasattr(self.job_queue, "queue") and self.job_queue.queue:
-            item = self.job_queue.queue.pop(0)
-            return await self.process_job(item.get("payload", {}))
-        return False
+        payload = await self.job_queue.dequeue_evaluation()
+        if payload is None:
+            return False
+        return await self.process_job(payload)
+
+    def request_shutdown(self) -> None:
+        """Ask the polling loop to stop after its current job completes."""
+        self._is_running = False
+        self._stop_event.set()
+
+    async def run_forever(self, poll_interval_seconds: float = 0.5) -> None:
+        """Continuously process queued jobs until graceful shutdown is requested."""
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be greater than zero")
+
+        self._is_running = True
+        self._stop_event.clear()
+        logger.info(f"Worker [{self.worker_id}] started.")
+        try:
+            while self._is_running:
+                processed = await self.run_once()
+                if processed:
+                    continue
+                try:
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=poll_interval_seconds)
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            self._is_running = False
+            logger.info(f"Worker [{self.worker_id}] stopped.")
+
+
+async def main() -> None:
+    """Run the production worker process."""
+    worker = EvaluationWorker()
+    await worker.run_forever()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

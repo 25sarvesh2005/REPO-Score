@@ -8,6 +8,7 @@ Adheres strictly to Phase 13 requirements:
 - No mocked success in production path
 """
 
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -418,10 +419,63 @@ async def test_worker_run_once(temp_fixture_repo, mock_db_session):
         session_factory=mock_session_factory,
     )
 
-    # Worker processes the single enqueued job
+    # Worker claims and processes the single enqueued job through the queue protocol.
     assert len(job_queue.queue) == 1
-    # Run process_job directly
-    item = job_queue.queue.pop(0)
-    success = await worker.process_job(item["payload"])
+    success = await worker.run_once()
     assert success is True
     assert mock_orch.execute_pipeline.called
+
+
+@pytest.mark.asyncio
+async def test_worker_run_forever_claims_queued_jobs(mock_db_session):
+    """The daemon loop must consume queued jobs instead of leaving them QUEUED indefinitely."""
+    job_queue = InMemoryJobQueue()
+    eval_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    await job_queue.enqueue_evaluation(
+        evaluation_id=eval_id,
+        payload={
+            "evaluation_id": str(eval_id),
+            "repository_id": str(repo_id),
+            "ref": "main",
+            "options": {"timeout_seconds": 60},
+        },
+    )
+
+    mock_orch = MagicMock(spec=EvaluationPipelineOrchestrator)
+    mock_orch.execute_pipeline = AsyncMock(
+        return_value=PipelineExecutionResult(
+            evaluation_id=eval_id,
+            repository_id=repo_id,
+            status=EvaluationStatus.COMPLETED,
+            overall_score=Decimal("92.0"),
+            grade=LetterGrade.A,
+        )
+    )
+    session, _ = mock_db_session
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    session.execute.return_value = mock_result
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def mock_session_factory():
+        yield session
+
+    worker = EvaluationWorker(
+        worker_id="daemon-test-worker",
+        job_queue=job_queue,
+        orchestrator=mock_orch,
+        session_factory=mock_session_factory,
+    )
+    worker_task = asyncio.create_task(worker.run_forever(poll_interval_seconds=0.01))
+    try:
+        for _ in range(20):
+            if mock_orch.execute_pipeline.called:
+                break
+            await asyncio.sleep(0.01)
+        assert mock_orch.execute_pipeline.called
+    finally:
+        worker.request_shutdown()
+        await asyncio.wait_for(worker_task, timeout=1)

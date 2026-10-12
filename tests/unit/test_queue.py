@@ -3,7 +3,9 @@ Unit tests for queue abstraction and in-memory mock implementation.
 """
 
 import uuid
+
 import pytest
+
 from backend.core.queue import InMemoryJobQueue
 
 
@@ -17,6 +19,8 @@ async def test_in_memory_queue_operations():
     await queue.enqueue_evaluation(eval_id, payload)
     assert len(queue.queue) == 1
     assert queue.queue[0]["id"] == str(eval_id)
+    assert await queue.dequeue_evaluation() == payload
+    assert await queue.dequeue_evaluation() is None
 
     # Test event publishing
     await queue.publish_event(eval_id, "step_started", {"step": "INGESTING"})

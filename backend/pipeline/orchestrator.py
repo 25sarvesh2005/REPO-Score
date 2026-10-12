@@ -120,7 +120,7 @@ class EvaluationPipelineOrchestrator:
 
         evaluation.started_at = datetime.now(timezone.utc)
         await self._publish_event(evaluation_id, "evaluation.lifecycle.started", {"status": "INGESTING"})
-        await session.flush()
+        await session.commit()
 
         snapshot_path: Optional[Path] = fixture_snapshot_path
         detection: Optional[TechnologyDetectionResult] = None
@@ -142,8 +142,8 @@ class EvaluationPipelineOrchestrator:
                     ingest_result = await self.ingestion_service.ingest_repository(repository.url, ref=ref)
                     if not ingest_result.success:
                         raise RuntimeError(f"Repository ingestion failed: {ingest_result.error_message}")
-                    snapshot_path = ingest_result.snapshot_path
-                    detection = ingest_result.detection
+                    snapshot_path = Path(ingest_result.snapshot_path)
+                    detection = ingest_result.technologies or detect_technologies_and_category(snapshot_path)
                 else:
                     detection = detect_technologies_and_category(snapshot_path)
 
@@ -191,8 +191,13 @@ class EvaluationPipelineOrchestrator:
 
                 # Persist evidence records to database
                 for f in findings:
+                    loc_dict = (
+                        f.location.model_dump()
+                        if hasattr(f.location, "model_dump")
+                        else (f.location if isinstance(f.location, dict) else None)
+                    )
                     ev_row = Evidence(
-                        id=f.id,
+                        id=uuid.uuid4(),
                         evaluation_id=evaluation_id,
                         source=f.analyzer_id,
                         category=f.category,
@@ -201,8 +206,8 @@ class EvaluationPipelineOrchestrator:
                         fingerprint=f.fingerprint,
                         title=f.title,
                         description=f.description,
-                        location=f.location.model_dump() if f.location else None,
-                        raw_payload=f.raw_payload,
+                        location=loc_dict,
+                        raw_payload=f.raw_evidence,
                         normalized_attributes={},
                         related_evidence_ids=[],
                     )
@@ -387,7 +392,7 @@ class EvaluationPipelineOrchestrator:
             started_at=datetime.now(timezone.utc),
         )
         session.add(step_db)
-        await session.flush()
+        await session.commit()
 
         return StepExecutionLog(
             step_name=step_name,
@@ -406,7 +411,13 @@ class EvaluationPipelineOrchestrator:
     ) -> None:
         log.status = status
         log.completed_at = datetime.now(timezone.utc)
-        log.duration_ms = int((log.completed_at - log.started_at).total_seconds() * 1000)
+        start_ts = log.started_at
+        if start_ts and start_ts.tzinfo is None:
+            start_ts = start_ts.replace(tzinfo=timezone.utc)
+        completed_ts = log.completed_at
+        if completed_ts and completed_ts.tzinfo is None:
+            completed_ts = completed_ts.replace(tzinfo=timezone.utc)
+        log.duration_ms = int((completed_ts - start_ts).total_seconds() * 1000) if start_ts else 0
         log.exit_code = exit_code
         log.error_message = error_message
         log.metadata = metadata or {}
@@ -424,7 +435,7 @@ class EvaluationPipelineOrchestrator:
             step_db.exit_code = exit_code
             step_db.error_message = error_message
             step_db.step_metadata = log.metadata
-        await session.flush()
+        await session.commit()
 
         # Record operational step metric and structured telemetry log
         record_step_metric(

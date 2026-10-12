@@ -6,7 +6,7 @@ Adheres strictly to FAILURE_MODEL.md, ADR-007, and Phase 17 resilience standards
 from abc import abstractmethod
 from datetime import datetime, timezone
 import json
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol, cast
 import uuid
 import redis.asyncio as aioredis
 
@@ -22,6 +22,11 @@ class IJobQueue(Protocol):
     @abstractmethod
     async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
         """Enqueue an evaluation job for worker processing."""
+        ...
+
+    @abstractmethod
+    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+        """Claim the next evaluation payload, or return ``None`` when the queue is empty."""
         ...
 
     @abstractmethod
@@ -72,6 +77,27 @@ class RedisJobQueue:
         serialized = json.dumps(payload)
         await client.rpush("reposcore:queue:evaluations", serialized)
         logger.info(f"Evaluation {evaluation_id} enqueued to Redis queue.")
+
+    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+        """Claim one queued payload without exposing Redis details to workers."""
+        client = self._get_client()
+        serialized = await client.lpop("reposcore:queue:evaluations")
+        if serialized is None:
+            return None
+        if not isinstance(serialized, (str, bytes, bytearray)):
+            logger.error("Discarding Redis evaluation payload with an invalid response type.")
+            return None
+
+        try:
+            payload = json.loads(serialized)
+        except (TypeError, json.JSONDecodeError) as exc:
+            logger.error(f"Discarding malformed Redis evaluation payload: {exc}")
+            return None
+
+        if not isinstance(payload, dict):
+            logger.error("Discarding Redis evaluation payload that is not a JSON object.")
+            return None
+        return cast(Dict[str, Any], payload)
 
     async def publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
         client = self._get_client()
@@ -125,6 +151,12 @@ class InMemoryJobQueue:
 
     async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
         self.queue.append({"id": str(evaluation_id), "payload": payload})
+
+    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+        """Claim the oldest queued payload using the same FIFO semantics as Redis."""
+        if not self.queue:
+            return None
+        return self.queue.pop(0)["payload"]
 
     async def publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
         self.published_events.append({"evaluation_id": str(evaluation_id), "event": event_type, "data": data})

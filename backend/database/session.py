@@ -16,9 +16,27 @@ from backend.observability.logger import get_logger
 
 logger = get_logger("reposcore.database")
 
+from sqlalchemy import event, text
+
+
 def _create_engine() -> AsyncEngine:
     if "sqlite" in settings.DATABASE_URL:
-        return create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+        eng = create_async_engine(
+            settings.DATABASE_URL,
+            connect_args={"check_same_thread": False, "timeout": 30},
+            echo=settings.DEBUG,
+        )
+
+        @event.listens_for(eng.sync_engine, "connect")
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=15000")
+            cursor.close()
+
+        return eng
+
     return create_async_engine(
         settings.DATABASE_URL,
         pool_size=settings.DB_POOL_SIZE,

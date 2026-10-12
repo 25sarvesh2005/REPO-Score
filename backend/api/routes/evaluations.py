@@ -127,7 +127,11 @@ async def create_evaluation(
     session.add(evaluation)
     await session.flush()
 
-    # 4. Enqueue evaluation to queue
+    # 4. Make the evaluation visible before a worker can claim its queue item.
+    # This matters for local in-process workers as well as fast Redis consumers.
+    await session.commit()
+
+    # 5. Enqueue evaluation to queue
     job_queue = get_job_queue()
     await job_queue.enqueue_evaluation(
         evaluation_id=eval_id,
@@ -210,12 +214,25 @@ async def get_evaluation_status(
 
     elapsed = 0
     if evaluation.started_at:
+        started_at = evaluation.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
         ref_time = evaluation.completed_at or datetime.now(timezone.utc)
-        elapsed = max(0, int((ref_time - evaluation.started_at).total_seconds()))
+        if ref_time.tzinfo is None:
+            ref_time = ref_time.replace(tzinfo=timezone.utc)
+        elapsed = max(0, int((ref_time - started_at).total_seconds()))
 
     current_step_name = None
     if evaluation.steps:
-        latest_step = sorted(evaluation.steps, key=lambda s: s.created_at, reverse=True)[0]
+        latest_step = sorted(
+            evaluation.steps,
+            key=lambda s: (
+                s.created_at.replace(tzinfo=timezone.utc)
+                if (s.created_at and s.created_at.tzinfo is None)
+                else (s.created_at or datetime.min.replace(tzinfo=timezone.utc))
+            ),
+            reverse=True,
+        )[0]
         current_step_name = latest_step.step_name
     else:
         current_step_name = evaluation.status.value.lower()

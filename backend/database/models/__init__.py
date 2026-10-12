@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import uuid
 from sqlalchemy import (
-    ARRAY,
+    ARRAY as PG_ARRAY_TYPE,
     BIGINT,
     BOOLEAN,
     CHAR,
@@ -16,9 +16,11 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -32,14 +34,51 @@ def _compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"
 
 
-@compiles(ARRAY, "sqlite")
-def _compile_array_sqlite(type_, compiler, **kw):
-    return "JSON"
-
-
 @compiles(UUID, "sqlite")
 def _compile_uuid_sqlite(type_, compiler, **kw):
     return "CHAR(36)"
+
+
+class PortableArray(TypeDecorator):
+    """
+    Transparently falls back to JSON serialization for SQLite / non-PostgreSQL dialects.
+    Uses native postgresql.ARRAY on PostgreSQL.
+    """
+    impl = JSON
+    cache_ok = True
+
+    def __init__(self, item_type=String, *args, **kwargs):
+        self.item_type = item_type
+        super().__init__(*args, **kwargs)
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+            return dialect.type_descriptor(PG_ARRAY(self.item_type))
+        return dialect.type_descriptor(JSON())
+
+    def process_bind_param(self, value, dialect):
+        if dialect.name == "postgresql":
+            return value
+        if value is None:
+            return None
+        return [str(v) if isinstance(v, uuid.UUID) else v for v in value]
+
+    def process_result_value(self, value, dialect):
+        if dialect.name == "postgresql":
+            return value
+        if value is None:
+            return []
+        if isinstance(value, str):
+            import json
+            try:
+                return json.loads(value)
+            except Exception:
+                return []
+        return value
+
+
+ARRAY = PortableArray
 
 from backend.api.schemas.contracts import (
     EvaluationStatus,

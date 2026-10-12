@@ -83,6 +83,13 @@ def test_enqueue_evaluation_success(mock_db, mock_queue):
     mock_res_snap.scalars.return_value = mock_scalars
 
     mock_db.execute.side_effect = [mock_res_repo, mock_res_snap]
+    enqueue_evaluation = mock_queue.enqueue_evaluation
+
+    async def enqueue_after_commit(*args, **kwargs):
+        assert mock_db.commit.await_count == 1
+        await enqueue_evaluation(*args, **kwargs)
+
+    mock_queue.enqueue_evaluation = enqueue_after_commit
 
     response = client.post(
         "/api/v1/evaluations",

@@ -200,6 +200,24 @@ class GitIngestionClient:
 
         returncode, stdout, stderr = await self._run_git_command(clone_args)
 
+        # If branch clone failed because requested branch was not found, fallback to upstream default branch
+        if returncode != 0 and ref and not is_full_commit_sha(ref):
+            if "remote branch" in stderr.lower() and "not found" in stderr.lower():
+                logger.info(f"Requested branch '{ref}' not found upstream, falling back to default branch.")
+                safe_remove_directory(target_dir)
+                target_dir.mkdir(parents=True, exist_ok=True)
+                fallback_branch_args = [
+                    "-c", "core.hooksPath=/dev/null",
+                    "-c", "http.sslVerify=true",
+                    "-c", "protocol.file.allow=never",
+                    "clone",
+                    "--depth", "1",
+                ]
+                if not self.allow_submodules:
+                    fallback_branch_args.extend(["--recurse-submodules=no"])
+                fallback_branch_args.extend([canonical_url, str(target_dir)])
+                returncode, stdout, stderr = await self._run_git_command(fallback_branch_args)
+
         # If shallow clone with branch failed because ref might be a raw commit SHA,
         # fallback to cloning default branch and checking out the specific SHA
         if returncode != 0 and ref and is_full_commit_sha(ref):
