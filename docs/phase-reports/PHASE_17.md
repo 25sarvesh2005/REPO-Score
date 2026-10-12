@@ -172,4 +172,4 @@ Markdown report written to: reports\regression_summary.md
 ## 7. Commit Verification
 
 - **Commit Message:** `phase(17): harden security and reliability`
-- **Resulting Commit SHA:** [To be recorded post-commit]
+- **Resulting Commit SHA:** `45a7731`
