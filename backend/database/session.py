@@ -16,15 +16,21 @@ from backend.observability.logger import get_logger
 
 logger = get_logger("reposcore.database")
 
+def _create_engine() -> AsyncEngine:
+    if "sqlite" in settings.DATABASE_URL:
+        return create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+    return create_async_engine(
+        settings.DATABASE_URL,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        pool_pre_ping=True,
+        echo=settings.DEBUG,
+    )
+
+
 # Create asynchronous engine
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_timeout=settings.DB_POOL_TIMEOUT,
-    pool_pre_ping=True,
-    echo=settings.DEBUG,
-)
+engine: AsyncEngine = _create_engine()
 
 # Async session factory
 AsyncSessionLocal = async_sessionmaker(

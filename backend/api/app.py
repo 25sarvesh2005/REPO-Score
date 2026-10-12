@@ -27,6 +27,13 @@ logger = get_logger("reposcore.api")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle management."""
     logger.info(f"Starting {settings.APP_NAME} in '{settings.APP_ENV}' environment...")
+    if "sqlite" in settings.DATABASE_URL:
+        from backend.database.base import TimestampedBase
+        from backend.database.session import engine
+        import backend.database.models  # noqa: F401
+        async with engine.begin() as conn:
+            await conn.run_sync(TimestampedBase.metadata.create_all)
+        logger.info("SQLite database tables initialized successfully.")
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
 

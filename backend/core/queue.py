@@ -155,7 +155,7 @@ def get_job_queue() -> IJobQueue:
     """Retrieve active queue instance."""
     global _job_queue
     if _job_queue is None:
-        if settings.APP_ENV == "testing":
+        if settings.APP_ENV == "testing" or settings.REDIS_URL.startswith("memory://"):
             _job_queue = InMemoryJobQueue()
         else:
             _job_queue = RedisJobQueue(settings.REDIS_URL)
