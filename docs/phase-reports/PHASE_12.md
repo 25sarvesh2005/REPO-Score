@@ -143,4 +143,4 @@ New tests added: 20 focused integration tests.
 ## 7. Resulting Git Commit Gate
 
 - **Required Commit Message:** `phase(12): implement evaluation dashboard`
-- **Resulting Commit SHA:** `PENDING_COMMIT`
+- **Resulting Commit SHA:** `36036d1`
