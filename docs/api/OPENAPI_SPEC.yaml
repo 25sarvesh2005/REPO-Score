@@ -1,0 +1,783 @@
+openapi: 3.1.0
+info:
+  title: RepoScore Evaluation Engine API
+  version: 1.0.0
+  description: >
+    Autonomous repository intelligence and software evaluation engine API.
+    Provides asynchronous evaluation orchestration, deterministic scoring,
+    normalized empirical evidence queries, and real-time SSE progress streaming.
+servers:
+  - url: /api/v1
+    description: Production API Gateway v1
+  - url: /
+    description: Root / Operational Health Gateway
+
+paths:
+  /health:
+    get:
+      summary: Liveness Probe
+      description: Returns liveness status of the API gateway.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Gateway is alive and responsive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /ready:
+    get:
+      summary: Readiness Probe
+      description: Verifies active connections to PostgreSQL and Redis.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: All dependencies connected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Downstream service unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /repositories:
+    post:
+      summary: Register Repository
+      description: Validates and registers a GitHub repository reference for evaluation.
+      operationId: registerRepository
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryRegistrationRequest'
+      responses:
+        '201':
+          description: Repository created successfully.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '422':
+          $ref: '#/components/responses/422ValidationError'
+
+  /repositories/{id}:
+    get:
+      summary: Get Repository Details
+      description: Retrieves metadata, branch info, and registered snapshots for a repository.
+      operationId: getRepository
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      responses:
+        '200':
+          description: Repository details returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryResponse'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /evaluations:
+    post:
+      summary: Enqueue Repository Evaluation
+      description: Enqueues an evaluation pipeline job against a repository snapshot.
+      operationId: enqueueEvaluation
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationCreateRequest'
+      responses:
+        '202':
+          description: Evaluation enqueued and accepted for asynchronous execution.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+            Location:
+              schema:
+                type: string
+                example: /api/v1/evaluations/01925b4a-8cf2-7612-882f-3d18c9ba1100/status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /evaluations/{id}:
+    get:
+      summary: Get Master Evaluation Record
+      operationId: getEvaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      responses:
+        '200':
+          description: Master evaluation record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationRecordResponse'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /evaluations/{id}/status:
+    get:
+      summary: Lightweight Status Polling
+      operationId: getEvaluationStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Evaluation lifecycle status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationStatusResponse'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /evaluations/{id}/events:
+    get:
+      summary: Real-Time SSE Event Stream
+      description: Server-Sent Events stream delivering live stage transitions and logs.
+      operationId: streamEvaluationEvents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Active SSE stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /evaluations/{id}/cancel:
+    post:
+      summary: Cancel Active Evaluation
+      description: Signals active workers to kill sandbox containers and abort job.
+      operationId: cancelEvaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cancellation signal accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationCancelResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+
+  /evaluations/{id}/score:
+    get:
+      summary: Get Deterministic Scorecard
+      description: Retrieves final composite score (0-100), letter grade, and 10 dimension receipts.
+      operationId: getEvaluationScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Scorecard details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardResponse'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Evaluation still in progress.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /evaluations/{id}/evidence:
+    get:
+      summary: Paginated Normalized Evidence
+      operationId: getEvaluationEvidence
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/EvidenceCategoryEnum'
+        - name: severity
+          in: query
+          schema:
+            $ref: '#/components/schemas/SeverityEnum'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Paginated evidence list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEvidenceResponse'
+
+  /evaluations/{id}/runtime:
+    get:
+      summary: Runtime Telemetry & Probing Data
+      operationId: getEvaluationRuntime
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Runtime telemetry metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeTelemetryResponse'
+
+  /evaluations/{id}/security:
+    get:
+      summary: Security & Vulnerability Audit Report
+      operationId: getEvaluationSecurity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Security vulnerability findings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityAuditResponse'
+
+  /evaluations/{id}/findings:
+    get:
+      summary: Static Analysis Findings
+      operationId: getEvaluationFindings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Static analyzer findings list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticFindingsResponse'
+
+  /evaluations/{id}/history:
+    get:
+      summary: Historical Cross-Commit Trends
+      operationId: getEvaluationHistory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: Historical evaluation records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationHistoryResponse'
+
+components:
+  headers:
+    X-Correlation-ID:
+      schema:
+        type: string
+        format: uuid
+      description: Distributed correlation identifier.
+
+  parameters:
+    CorrelationIdHeader:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Client-provided correlation ID.
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Idempotency token for POST requests.
+
+  responses:
+    400BadRequest:
+      description: Invalid request parameters or body.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404NotFound:
+      description: Requested entity does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    422ValidationError:
+      description: Request schema validation failure.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail, instance, correlation_id, timestamp]
+      properties:
+        type:
+          type: string
+          example: https://reposcore.internal/errors/not-found
+        title:
+          type: string
+          example: Resource Not Found
+        status:
+          type: integer
+          example: 404
+        detail:
+          type: string
+          example: The requested evaluation does not exist.
+        instance:
+          type: string
+          example: /api/v1/evaluations/01925b4a-8cf2
+        correlation_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        invalid_params:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              reason: { type: string }
+
+    ReadinessResponse:
+      type: object
+      required: [status, database, redis]
+      properties:
+        status:
+          type: string
+          example: ready
+        database:
+          type: string
+          example: connected
+        redis:
+          type: string
+          example: connected
+
+    RepositoryRegistrationRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          example: https://github.com/fastapi/fastapi
+        provider:
+          type: string
+          default: github
+          example: github
+
+    RepositoryResponse:
+      type: object
+      required: [id, url, owner, name, default_branch, is_private, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        owner:
+          type: string
+        name:
+          type: string
+        default_branch:
+          type: string
+        is_private:
+          type: boolean
+        stars_count:
+          type: integer
+        primary_language:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    EvaluationCreateRequest:
+      type: object
+      required: [repository_id]
+      properties:
+        repository_id:
+          type: string
+          format: uuid
+        ref:
+          type: string
+          default: main
+        options:
+          type: object
+          properties:
+            timeout_seconds:
+              type: integer
+              default: 600
+              maximum: 1800
+            enable_ai_reasoning:
+              type: boolean
+              default: true
+
+    EvaluationAcceptedResponse:
+      type: object
+      required: [evaluation_id, status, correlation_id, status_url, events_url]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/EvaluationStatusEnum'
+        correlation_id:
+          type: string
+          format: uuid
+        status_url:
+          type: string
+        events_url:
+          type: string
+
+    EvaluationRecordResponse:
+      type: object
+      required: [id, repository_id, snapshot_id, status, correlation_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        repository_id:
+          type: string
+          format: uuid
+        snapshot_id:
+          type: string
+          format: uuid
+        commit_sha:
+          type: string
+        status:
+          $ref: '#/components/schemas/EvaluationStatusEnum'
+        correlation_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        error_summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    EvaluationStatusResponse:
+      type: object
+      required: [evaluation_id, status, current_step, elapsed_seconds, is_terminal]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/EvaluationStatusEnum'
+        current_step:
+          type: string
+        elapsed_seconds:
+          type: integer
+        is_terminal:
+          type: boolean
+
+    EvaluationCancelResponse:
+      type: object
+      required: [evaluation_id, status, message]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: CANCELLED
+        message:
+          type: string
+
+    ScorecardResponse:
+      type: object
+      required: [evaluation_id, scoring_version, overall_score, grade, dimensions, created_at]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        scoring_version:
+          type: string
+          example: "1.0.0"
+        overall_score:
+          type: number
+          minimum: 0.0
+          maximum: 100.0
+          example: 88.5
+        grade:
+          type: string
+          enum: ['A+', 'A', 'B', 'C', 'D', 'F']
+          example: "A"
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDimensionItem'
+        ai_executive_summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ScoreDimensionItem:
+      type: object
+      required: [dimension_name, score, weight, itemized_receipt]
+      properties:
+        dimension_name:
+          type: string
+        score:
+          type: number
+        weight:
+          type: number
+        itemized_receipt:
+          type: array
+          items:
+            type: object
+
+    PaginatedEvidenceResponse:
+      type: object
+      required: [items, total_count, limit, offset, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+        total_count:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    EvidenceItem:
+      type: object
+      required: [id, source, category, severity, confidence, title, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        category:
+          $ref: '#/components/schemas/EvidenceCategoryEnum'
+        severity:
+          $ref: '#/components/schemas/SeverityEnum'
+        confidence:
+          type: number
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: object
+
+    RuntimeTelemetryResponse:
+      type: object
+      required: [evaluation_id, observations]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        observations:
+          type: array
+          items:
+            type: object
+
+    SecurityAuditResponse:
+      type: object
+      required: [evaluation_id, cve_findings, secret_findings]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        cve_findings:
+          type: array
+          items:
+            type: object
+        secret_findings:
+          type: array
+          items:
+            type: object
+
+    StaticFindingsResponse:
+      type: object
+      required: [evaluation_id, findings]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        findings:
+          type: array
+          items:
+            type: object
+
+    EvaluationHistoryResponse:
+      type: object
+      required: [repository_id, evaluations]
+      properties:
+        repository_id:
+          type: string
+          format: uuid
+        evaluations:
+          type: array
+          items:
+            type: object
+
+    EvaluationStatusEnum:
+      type: string
+      enum:
+        - QUEUED
+        - INGESTING
+        - ANALYZING
+        - BUILDING
+        - STARTING
+        - TESTING
+        - OBSERVING
+        - SCORING
+        - AI_INTERPRETATION
+        - COMPLETED
+        - PARTIALLY_COMPLETED
+        - BUILD_FAILED
+        - STARTUP_FAILED
+        - FAILED
+        - TIMEOUT
+        - CANCELLED
+        - UNSUPPORTED
+
+    EvidenceCategoryEnum:
+      type: string
+      enum:
+        - CORRECTNESS
+        - SECURITY
+        - RELIABILITY
+        - TESTING
+        - MAINTAINABILITY
+        - ARCHITECTURE
+        - PERFORMANCE
+        - DEPENDENCY_HEALTH
+        - DOCUMENTATION
+        - ENGINEERING_MATURITY
+
+    SeverityEnum:
+      type: string
+      enum:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+        - LOW
+        - INFO
