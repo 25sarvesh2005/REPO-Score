@@ -18,6 +18,7 @@ SECRET_PATTERNS = [
     (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "[REDACTED_GH_TOKEN]"),
     (re.compile(r"github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}"), "[REDACTED_GH_PAT]"),
     (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED_AWS_KEY]"),
+    (re.compile(r"(?i)(aws_secret_access_key|secret_key|aws_key|api_key)\s*[:=]\s*['\"][a-zA-Z0-9/+=]{30,}['\"]"), r'\1 = "[REDACTED_SECRET]"'),
     (re.compile(r"bearer\s+[a-zA-Z0-9_.\-~+/]{20,}", re.IGNORECASE), "Bearer [REDACTED_TOKEN]"),
     (re.compile(r"-----BEGIN[ A-Z0-9_-]+PRIVATE KEY-----.*?-----END[ A-Z0-9_-]+PRIVATE KEY-----", re.DOTALL), "[REDACTED_PRIVATE_KEY]"),
     (re.compile(r"postgres(ql)?://([^:]+):([^@]+)@", re.IGNORECASE), r"postgresql://\2:[REDACTED]@"),
