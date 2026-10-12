@@ -11,7 +11,6 @@ from sqlalchemy import (
     BIGINT,
     BOOLEAN,
     CHAR,
-    CHECK,
     DateTime,
     Enum,
     Float,
@@ -280,7 +279,7 @@ class Score(TimestampedBase):
 
     evaluation: Mapped["Evaluation"] = relationship(back_populates="score")
     dimensions: Mapped[List["ScoreDimension"]] = relationship(
-        back_populates="score", cascade="all, delete-orphan"
+        back_populates="score_rel", cascade="all, delete-orphan"
     )
 
 
