@@ -271,8 +271,10 @@ async def test_adversarial_worker_unhandled_crash_rollback(mock_db_session):
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             pass
 
+    queue = InMemoryJobQueue()
     worker = EvaluationWorker(
         worker_id="adversarial-worker-1",
+        job_queue=queue,
         orchestrator=mock_orchestrator,
         session_factory=lambda: MockSessionFactory(),
     )
@@ -287,6 +289,9 @@ async def test_adversarial_worker_unhandled_crash_rollback(mock_db_session):
     result = await worker.process_job(payload)
     assert result is False
     session.rollback.assert_awaited()
+    # Task should be routed to DLQ
+    assert len(queue.dlq) == 1
+    assert queue.dlq[0]["evaluation_id"] == str(eval_id)
 
 
 @pytest.mark.asyncio
@@ -294,7 +299,8 @@ async def test_adversarial_worker_malformed_payload_rejection():
     """
     Verify worker safely rejects payloads missing required UUID keys or containing corrupted IDs.
     """
-    worker = EvaluationWorker(worker_id="adversarial-worker-2")
+    queue = InMemoryJobQueue()
+    worker = EvaluationWorker(worker_id="adversarial-worker-2", job_queue=queue)
 
     # Missing evaluation_id
     assert await worker.process_job({"repository_id": str(uuid.uuid4())}) is False

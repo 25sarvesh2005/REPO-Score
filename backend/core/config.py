@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     ALLOW_SUBMODULES: bool = Field(default=False)
     SNAPSHOT_STORAGE_PATH: str = Field(default="repo_snapshots")
 
+    # Rate Limiting & Abuse Prevention
+    RATE_LIMIT_ENABLED: bool = Field(default=True)
+    RATE_LIMIT_PER_MINUTE: int = Field(default=120, ge=10, le=10000)
+
     # Sandbox Security & Resource Quotas
     SANDBOX_DEFAULT_IMAGE_PYTHON: str = Field(
         default="reposcore/sandbox-python:3.11-slim"

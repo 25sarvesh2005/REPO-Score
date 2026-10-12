@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.errors import register_error_handlers
+from backend.api.rate_limiter import RateLimitingMiddleware
 from backend.api.routes.evaluations import router as evaluations_router
 from backend.api.routes.health import router as health_router
 from backend.api.routes.repositories import router as repositories_router
@@ -52,10 +53,13 @@ def create_app() -> FastAPI:
         expose_headers=["X-Correlation-ID", "Location", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     )
 
-    # 2. Correlation ID Middleware
+    # 2. Rate Limiting Middleware
+    app.add_middleware(RateLimitingMiddleware, requests_per_minute=settings.RATE_LIMIT_PER_MINUTE)
+
+    # 3. Correlation ID Middleware
     app.add_middleware(CorrelationIdMiddleware)
 
-    # 3. Register RFC 7807 Exception Handlers
+    # 4. Register RFC 7807 Exception Handlers
     register_error_handlers(app)
 
     # 4. Operational Health & Metrics Routes (Root level)

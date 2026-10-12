@@ -102,11 +102,19 @@ class EvaluationWorker:
                     eval_rec.completed_at = datetime.now(timezone.utc)
                     await session.commit()
                 record_evaluation_metric("timeout", timeout)
+                try:
+                    await self.job_queue.send_to_dlq(eval_id, payload, reason=f"Timeout exceeded ({timeout}s)")
+                except Exception as dlq_err:
+                    logger.warning(f"Worker [{self.worker_id}] failed to route to DLQ: {dlq_err}")
                 return False
 
             except Exception as exc:
                 logger.error(f"Worker [{self.worker_id}] evaluation {eval_id} encountered fatal error: {exc}", exc_info=True)
                 await session.rollback()
+                try:
+                    await self.job_queue.send_to_dlq(eval_id, payload, reason=str(exc))
+                except Exception as dlq_err:
+                    logger.warning(f"Worker [{self.worker_id}] failed to route to DLQ: {dlq_err}")
                 return False
 
     async def run_once(self) -> bool:

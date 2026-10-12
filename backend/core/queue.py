@@ -1,10 +1,12 @@
 """
-Distributed job queue abstraction and Redis implementation.
+Distributed job queue abstraction, Redis implementation, and Dead-Letter Queue (DLQ).
+Adheres strictly to FAILURE_MODEL.md, ADR-007, and Phase 17 resilience standards.
 """
 
 from abc import abstractmethod
+from datetime import datetime, timezone
 import json
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 import uuid
 import redis.asyncio as aioredis
 
@@ -15,7 +17,7 @@ logger = get_logger("reposcore.queue")
 
 
 class IJobQueue(Protocol):
-    """Protocol for RepoScore asynchronous evaluation queue."""
+    """Protocol for RepoScore asynchronous evaluation queue and DLQ."""
 
     @abstractmethod
     async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
@@ -38,13 +40,18 @@ class IJobQueue(Protocol):
         ...
 
     @abstractmethod
+    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
+        """Move an unrecoverable or failed task to the dead-letter queue."""
+        ...
+
+    @abstractmethod
     async def check_health(self) -> str:
         """Check queue connectivity."""
         ...
 
 
 class RedisJobQueue:
-    """Production Redis queue implementation using streams and Pub/Sub."""
+    """Production Redis queue implementation using streams, Pub/Sub, and DLQ."""
 
     def __init__(self, redis_url: str = settings.REDIS_URL):
         self.redis_url = redis_url
@@ -84,6 +91,17 @@ class RedisJobQueue:
         await client.set(key, "1", ex=600)  # 10 minute TTL
         logger.info(f"Cancellation requested for evaluation {evaluation_id}.")
 
+    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
+        client = self._get_client()
+        dlq_entry = {
+            "evaluation_id": str(evaluation_id),
+            "payload": payload,
+            "reason": reason,
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await client.rpush("reposcore:dlq:evaluations", json.dumps(dlq_entry))
+        logger.warning(f"Evaluation {evaluation_id} moved to DLQ: {reason}")
+
     async def check_health(self) -> str:
         try:
             client = self._get_client()
@@ -97,12 +115,13 @@ class RedisJobQueue:
 
 
 class InMemoryJobQueue:
-    """In-memory mock queue implementation for unit tests and local isolation."""
+    """In-memory mock queue implementation for unit tests, local isolation, and DLQ tracking."""
 
     def __init__(self) -> None:
         self.queue: list[Dict[str, Any]] = []
         self.cancelled_tokens: set[str] = set()
         self.published_events: list[Dict[str, Any]] = []
+        self.dlq: list[Dict[str, Any]] = []
 
     async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
         self.queue.append({"id": str(evaluation_id), "payload": payload})
@@ -115,6 +134,14 @@ class InMemoryJobQueue:
 
     async def request_cancellation(self, evaluation_id: uuid.UUID) -> None:
         self.cancelled_tokens.add(str(evaluation_id))
+
+    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
+        self.dlq.append({
+            "evaluation_id": str(evaluation_id),
+            "payload": payload,
+            "reason": reason,
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     async def check_health(self) -> str:
         return "connected"
