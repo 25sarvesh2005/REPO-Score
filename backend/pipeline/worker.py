@@ -56,8 +56,12 @@ class EvaluationWorker:
             logger.error(f"Malformed job payload missing IDs: {payload}")
             return False
 
-        eval_id = uuid.UUID(raw_eval_id)
-        repo_id = uuid.UUID(raw_repo_id)
+        try:
+            eval_id = uuid.UUID(str(raw_eval_id))
+            repo_id = uuid.UUID(str(raw_repo_id))
+        except (ValueError, TypeError, AttributeError) as exc:
+            logger.error(f"Malformed job payload with invalid UUIDs: {payload} - {exc}")
+            return False
 
         logger.info(f"Worker [{self.worker_id}] claimed evaluation {eval_id}...")
 
