@@ -46,7 +46,11 @@ class Settings(BaseSettings):
     # Evaluation Limits & Timeouts
     EVALUATION_DEFAULT_TIMEOUT_SECONDS: int = Field(default=600, ge=60, le=3600)
     EVALUATION_MAX_TIMEOUT_SECONDS: int = Field(default=1800, ge=300, le=7200)
-    SNAPSHOT_STORAGE_PATH: str = Field(default="/var/reposcore/snapshots")
+    INGESTION_TIMEOUT_SECONDS: int = Field(default=120, ge=10, le=600)
+    MAX_REPO_SIZE_BYTES: int = Field(default=250 * 1024 * 1024, ge=1024 * 1024)
+    MAX_REPO_FILE_COUNT: int = Field(default=25000, ge=100)
+    ALLOW_SUBMODULES: bool = Field(default=False)
+    SNAPSHOT_STORAGE_PATH: str = Field(default="repo_snapshots")
 
     # Sandbox Security & Resource Quotas
     SANDBOX_DEFAULT_IMAGE_PYTHON: str = Field(
