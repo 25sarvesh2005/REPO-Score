@@ -203,7 +203,7 @@ tests/unit/test_validator.py::test_reject_malicious_or_invalid_git_refs[aaaaaaaa
 ## 7. Commit Information
 
 - **Required Commit Message:** `phase(07): implement isolated sandbox`
-- **Commit SHA:** Pending commit gate execution
+- **Commit SHA:** `641017e91c9bc1dd12f57de2f5d15876dac7d903`
 
 ---
 
