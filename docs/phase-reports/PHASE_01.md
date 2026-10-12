@@ -121,7 +121,7 @@ A comparative audit of Phase 01 specifications against `/phases/00_ARCHITECTURE.
 ## 7. Commit Information
 
 - **Required Commit Message:** `phase(01): establish software requirements`
-- **Commit SHA:** `PENDING_COMMIT` *(Will be populated immediately post-commit)*
+- **Commit SHA:** `2b25d7efb1a18bd1460b6eff459513ef3f2b11e8`
 
 ---
 
