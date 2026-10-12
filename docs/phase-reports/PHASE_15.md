@@ -185,4 +185,4 @@ $ python -m alembic -c backend/database/alembic.ini heads
 ## 7. Commit Verification
 
 - **Commit Message:** `phase(15): establish CI and regression workflow`
-- **Resulting Commit SHA:** [To be recorded post-commit]
+- **Resulting Commit SHA:** `f2af3f8`
