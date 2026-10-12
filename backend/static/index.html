@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="RepoScore — Empirical, evidence-backed repository intelligence and deterministic software evaluation engine dashboard.">
+  <title>RepoScore — Autonomous Repository Intelligence Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body class="dark-theme">
+  <!-- Top Navigation Header -->
+  <header class="app-header" id="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <div class="brand-logo-glow">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title" id="main-brand-title">RepoScore</h1>
+          <span class="brand-tagline">Autonomous Repository Intelligence</span>
+        </div>
+      </div>
+
+      <nav class="header-nav" id="main-header-nav" aria-label="Main Navigation">
+        <button class="nav-tab active" id="nav-tab-dashboard" data-tab="dashboard">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-tab" id="nav-tab-history" data-tab="history">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Evaluation History
+        </button>
+      </nav>
+
+      <div class="system-status-indicator" id="system-status-indicator">
+        <span class="status-pulse-dot" id="system-status-dot"></span>
+        <span class="status-text" id="system-status-text">Engine Online (Deterministic v1.0.0)</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="main-container" id="main-content">
+    
+    <!-- SECTION 1: Repository Submission & Quick Actions -->
+    <section class="card submission-card" id="submission-section" aria-labelledby="submission-heading">
+      <div class="card-header">
+        <div class="header-titles">
+          <h2 class="section-title" id="submission-heading">Submit Repository for Evaluation</h2>
+          <p class="section-subtitle">Empirical, evidence-backed sandbox testing with deterministic mathematical scoring.</p>
+        </div>
+        <div class="quick-samples" id="quick-samples-container">
+          <span class="quick-samples-label">Samples:</span>
+          <button class="chip-sample" id="sample-fastapi" data-url="https://github.com/fastapi/fastapi" data-ref="master">fastapi/fastapi</button>
+          <button class="chip-sample" id="sample-express" data-url="https://github.com/expressjs/express" data-ref="master">expressjs/express</button>
+          <button class="chip-sample" id="sample-django" data-url="https://github.com/django/django" data-ref="main">django/django</button>
+        </div>
+      </div>
+
+      <form class="submission-form" id="evaluation-submit-form" onsubmit="return false;">
+        <div class="form-grid">
+          <div class="form-group repo-url-group">
+            <label for="repo-url-input" class="form-label">Repository GitHub URL <span class="required-star">*</span></label>
+            <div class="input-with-icon">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+              <input type="url" id="repo-url-input" class="form-input" placeholder="https://github.com/owner/repository" required autocomplete="off">
+            </div>
+            <span class="field-hint" id="repo-url-hint">Accepts canonical public GitHub repository URLs</span>
+          </div>
+
+          <div class="form-group ref-group">
+            <label for="repo-ref-input" class="form-label">Branch / Commit Ref</label>
+            <input type="text" id="repo-ref-input" class="form-input" placeholder="main" value="main">
+          </div>
+
+          <div class="form-group options-group">
+            <label class="form-label">Evaluation Options</label>
+            <div class="checkbox-row">
+              <label class="custom-checkbox-label">
+                <input type="checkbox" id="ai-reasoning-toggle" checked>
+                <span class="checkbox-box"></span>
+                <span class="checkbox-text">AI Advisory Interpretation</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary btn-glow" id="start-evaluation-btn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="start-btn-label">Run Autonomous Evaluation</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- SECTION 2: Active Evaluation Tracker / Live Stepper -->
+    <section class="card tracking-card hidden" id="tracking-section" aria-labelledby="tracker-heading">
+      <div class="tracker-header">
+        <div class="tracker-info">
+          <span class="eyebrow-badge" id="tracker-eval-id">EVALUATION #PENDING</span>
+          <h3 class="tracker-title" id="tracker-heading">Autonomous Lifecycle in Progress</h3>
+          <p class="tracker-subtitle" id="tracker-target-repo">Target: <span id="tracker-repo-name">--</span></p>
+        </div>
+        <div class="tracker-controls">
+          <div class="elapsed-badge" id="tracker-elapsed-badge">
+            <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="tracker-elapsed-text">0s elapsed</span>
+          </div>
+          <button class="btn btn-danger-outline" id="cancel-evaluation-btn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            Cancel Run
+          </button>
+        </div>
+      </div>
+
+      <!-- Lifecycle Progress Stepper -->
+      <div class="lifecycle-stepper" id="lifecycle-stepper" aria-label="Evaluation Steps">
+        <div class="step-item" id="step-INGESTING" data-step="INGESTING">
+          <div class="step-circle"><span class="step-number">1</span></div>
+          <div class="step-label">Ingest & Clone</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-ANALYZING" data-step="ANALYZING">
+          <div class="step-circle"><span class="step-number">2</span></div>
+          <div class="step-label">Static Analysis</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-BUILDING" data-step="BUILDING">
+          <div class="step-circle"><span class="step-number">3</span></div>
+          <div class="step-label">Sandbox Build</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-STARTING" data-step="STARTING">
+          <div class="step-circle"><span class="step-number">4</span></div>
+          <div class="step-label">Runtime Startup</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-TESTING" data-step="TESTING">
+          <div class="step-circle"><span class="step-number">5</span></div>
+          <div class="step-label">Health & Probes</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-SCORING" data-step="SCORING">
+          <div class="step-circle"><span class="step-number">6</span></div>
+          <div class="step-label">Deterministic Scoring</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-AI_INTERPRETATION" data-step="AI_INTERPRETATION">
+          <div class="step-circle"><span class="step-number">7</span></div>
+          <div class="step-label">AI Interpretation</div>
+        </div>
+      </div>
+
+      <div class="progress-bar-wrapper">
+        <div class="progress-bar-fill" id="progress-bar-fill" style="width: 10%;"></div>
+      </div>
+      <div class="tracker-status-message" id="tracker-status-message">Initializing isolated sandbox environment...</div>
+    </section>
+
+    <!-- SECTION 3: Finalized Results View -->
+    <div class="results-layout hidden" id="results-container">
+      
+      <!-- Composite Scorecard Banner -->
+      <section class="scorecard-hero card" id="scorecard-hero">
+        <div class="scorecard-hero-grid">
+          <div class="score-radial-group">
+            <div class="radial-score-meter" id="radial-score-meter">
+              <svg class="radial-svg" viewBox="0 0 160 160">
+                <circle class="radial-bg" cx="80" cy="80" r="70"/>
+                <circle class="radial-bar" id="radial-bar" cx="80" cy="80" r="70" stroke-dasharray="440" stroke-dashoffset="100"/>
+              </svg>
+              <div class="radial-inner">
+                <span class="radial-score-number" id="radial-score-number">--</span>
+                <span class="radial-score-max">/ 100</span>
+              </div>
+            </div>
+            <div class="grade-badge grade-unscored" id="composite-grade-badge">--</div>
+          </div>
+
+          <div class="score-meta-group">
+            <div class="meta-tags">
+              <span class="pill-tag pill-version" id="ruleset-version-pill">Ruleset v1.0.0</span>
+              <span class="pill-tag pill-deterministic">100% Deterministic Core</span>
+              <span class="pill-tag pill-status" id="eval-status-pill">COMPLETED</span>
+            </div>
+            <h3 class="meta-repo-name" id="result-repo-heading">fastapi / fastapi</h3>
+            <p class="meta-description" id="result-meta-description">Evaluated commit <code id="result-commit-sha">master</code> &bull; Finished in <span id="result-duration">--</span></p>
+
+            <div class="score-quick-stats">
+              <div class="quick-stat-box">
+                <span class="stat-value" id="stat-total-evidence">0</span>
+                <span class="stat-label">Verified Findings</span>
+              </div>
+              <div class="quick-stat-box">
+                <span class="stat-value" id="stat-critical-count">0</span>
+                <span class="stat-label">Critical Alerts</span>
+              </div>
+              <div class="quick-stat-box">
+                <span class="stat-value" id="stat-runtime-strategy">--</span>
+                <span class="stat-label">Sandbox Archetype</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Failure Diagnostic Banner (if partial or failed) -->
+        <div class="failure-diagnostic-banner hidden" id="failure-diagnostic-banner">
+          <svg class="banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div class="banner-content">
+            <h4 class="banner-title" id="failure-banner-title">Evaluation Failure Incident</h4>
+            <p class="banner-text" id="failure-banner-text">Runtime execution failed. Dimensions were calculated under standardized failure penalties.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results Sub-Navigation -->
+      <nav class="results-subnav" id="results-subnav" aria-label="Results Exploration Tabs">
+        <button class="subnav-tab active" id="tab-btn-dimensions" data-subtab="dimensions">
+          10 Dimensions & Receipts
+        </button>
+        <button class="subnav-tab" id="tab-btn-evidence" data-subtab="evidence">
+          Verified Evidence (<span id="evidence-tab-counter">0</span>)
+        </button>
+        <button class="subnav-tab" id="tab-btn-runtime" data-subtab="runtime">
+          Runtime Telemetry
+        </button>
+        <button class="subnav-tab" id="tab-btn-ai" data-subtab="ai">
+          AI Advisory Guidance
+        </button>
+      </nav>
+
+      <!-- TAB 1: 10 Dimensions & Itemized Receipts -->
+      <section class="subtab-pane active" id="pane-dimensions">
+        <div class="dimensions-header">
+          <div>
+            <h3 class="pane-title">Multi-Dimensional Score Breakdown</h3>
+            <p class="pane-subtitle">Calculated using empirical deductions from 100.0 base score. Click any dimension to inspect itemized receipts.</p>
+          </div>
+          <div class="receipts-legend">
+            <span class="legend-dot deduction-dot"></span> Deductions
+            <span class="legend-dot credit-dot"></span> Credits
+          </div>
+        </div>
+
+        <div class="dimensions-grid" id="dimensions-grid">
+          <!-- Dynamically populated 10 cards -->
+        </div>
+      </section>
+
+      <!-- TAB 2: Verified Evidence Records -->
+      <section class="subtab-pane hidden" id="pane-evidence">
+        <div class="evidence-toolbar">
+          <div class="filter-group">
+            <label for="filter-evidence-severity" class="filter-label">Severity:</label>
+            <select id="filter-evidence-severity" class="form-select">
+              <option value="">All Severities</option>
+              <option value="CRITICAL">CRITICAL</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="LOW">LOW</option>
+              <option value="INFO">INFO</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-evidence-category" class="filter-label">Category:</label>
+            <select id="filter-evidence-category" class="form-select">
+              <option value="">All Categories</option>
+              <option value="SECURITY">Security</option>
+              <option value="CORRECTNESS">Correctness</option>
+              <option value="RELIABILITY">Reliability</option>
+              <option value="TESTING">Testing</option>
+              <option value="MAINTAINABILITY">Maintainability</option>
+              <option value="ARCHITECTURE">Architecture</option>
+              <option value="PERFORMANCE">Performance</option>
+              <option value="DEPENDENCY_HEALTH">Dependency Health</option>
+              <option value="DOCUMENTATION">Documentation</option>
+              <option value="ENGINEERING_MATURITY">Engineering Maturity</option>
+            </select>
+          </div>
+          <div class="search-group">
+            <input type="text" id="evidence-search-input" class="form-input search-input" placeholder="Search findings...">
+          </div>
+        </div>
+
+        <div class="evidence-list" id="evidence-list-container">
+          <!-- Dynamically rendered evidence items -->
+        </div>
+      </section>
+
+      <!-- TAB 3: Runtime Telemetry -->
+      <section class="subtab-pane hidden" id="pane-runtime">
+        <div class="runtime-overview-grid">
+          <div class="telemetry-box">
+            <span class="telemetry-label">Sandbox Strategy</span>
+            <span class="telemetry-value" id="rt-strategy">--</span>
+          </div>
+          <div class="telemetry-box">
+            <span class="telemetry-label">Build Result</span>
+            <span class="telemetry-value" id="rt-build-status">--</span>
+          </div>
+          <div class="telemetry-box">
+            <span class="telemetry-label">Startup Readiness</span>
+            <span class="telemetry-value" id="rt-startup-status">--</span>
+          </div>
+          <div class="telemetry-box">
+            <span class="telemetry-label">HTTP p95 Latency</span>
+            <span class="telemetry-value" id="rt-latency">--</span>
+          </div>
+        </div>
+
+        <div class="card terminal-card" id="sandbox-security-panel">
+          <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">Sandbox Security & Host Isolation Enforcement</span>
+          </div>
+          <div class="terminal-body" id="sandbox-telemetry-log">
+            <pre class="telemetry-code">
+[SECURITY BOUNDARY VERIFIED]
+• Runtime Isolation: Docker RunC with Dropped Capabilities (CAP_DROP ALL)
+• User Permissions: Non-root UID 10001 (sandbox), GID 10001 enforced
+• Network Egress: Loopback interface only (NetworkMode: NONE / Internal)
+• Storage Isolation: Read-only container rootfs with tmpfs volume bounds
+• Secret Redaction: Active regex filters scrubbing environment & process memory
+            </pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: AI Qualitative Interpretation -->
+      <section class="subtab-pane hidden" id="pane-ai">
+        <!-- AI Advisory Role Banner -->
+        <div class="ai-advisory-banner">
+          <svg class="advisory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <div>
+            <strong>AI Governance Boundary (Prime Directive #5):</strong>
+            <span>AI interpretation is qualitative and advisory. Numerical scores are 100% deterministic and cannot be modified by AI reasoning.</span>
+          </div>
+        </div>
+
+        <div class="ai-layout-grid">
+          <div class="ai-card executive-summary-card">
+            <div class="ai-card-header">
+              <h4 class="ai-card-title">Executive Summary</h4>
+              <span class="ai-model-pill" id="ai-model-name">Ollama llama3.2:3b</span>
+            </div>
+            <p class="ai-card-text" id="ai-executive-summary">--</p>
+          </div>
+
+          <div class="ai-card">
+            <div class="ai-card-header">
+              <h4 class="ai-card-title">Architectural Assessment</h4>
+            </div>
+            <p class="ai-card-text" id="ai-architectural-assessment">--</p>
+          </div>
+
+          <div class="ai-card">
+            <div class="ai-card-header">
+              <h4 class="ai-card-title">Security Risk Narrative</h4>
+            </div>
+            <p class="ai-card-text" id="ai-security-narrative">--</p>
+          </div>
+        </div>
+
+        <div class="ai-recommendations-section">
+          <h4 class="recommendations-heading">Prioritized Remediation Roadmap</h4>
+          <div class="recommendations-grid" id="ai-recommendations-container">
+            <!-- Dynamically populated recommendations -->
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- SECTION 4: Evaluation History Tab View -->
+    <section class="card history-section hidden" id="history-section" aria-labelledby="history-heading">
+      <div class="card-header">
+        <div>
+          <h2 class="section-title" id="history-heading">Evaluation History & Cross-Commit Trends</h2>
+          <p class="section-subtitle">Browse recent evaluations, regression trends, and historical grades.</p>
+        </div>
+        <button class="btn btn-secondary" id="refresh-history-btn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <div class="history-table-wrapper">
+        <table class="history-table" id="history-table">
+          <thead>
+            <tr>
+              <th>Evaluation ID</th>
+              <th>Status</th>
+              <th>Overall Score</th>
+              <th>Grade</th>
+              <th>Timestamp</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <!-- Dynamically populated history rows -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <!-- Itemized Receipt Drawer Modal -->
+  <div class="receipt-drawer-backdrop hidden" id="receipt-drawer-backdrop">
+    <div class="receipt-drawer" id="receipt-drawer">
+      <div class="drawer-header">
+        <div>
+          <span class="drawer-category-pill" id="drawer-category-pill">DIMENSION</span>
+          <h3 class="drawer-title" id="drawer-dimension-title">Itemized Deduction Receipt</h3>
+        </div>
+        <button class="btn-close-drawer" id="close-drawer-btn" aria-label="Close Drawer">&times;</button>
+      </div>
+      <div class="drawer-score-summary">
+        <div class="drawer-stat">
+          <span class="drawer-stat-label">Dimension Score</span>
+          <span class="drawer-stat-value" id="drawer-score-value">100.0</span>
+        </div>
+        <div class="drawer-stat">
+          <span class="drawer-stat-label">Weight</span>
+          <span class="drawer-stat-value" id="drawer-weight-value">0.18</span>
+        </div>
+        <div class="drawer-stat">
+          <span class="drawer-stat-label">Base Points</span>
+          <span class="drawer-stat-value">100.0</span>
+        </div>
+      </div>
+      <div class="drawer-receipt-list" id="drawer-receipt-list">
+        <!-- Dynamically rendered receipt items -->
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

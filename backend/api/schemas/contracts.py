@@ -204,3 +204,49 @@ class ReadinessResponse(BaseModel):
     status: str = "ready"
     database: str = "connected"
     redis: str = "connected"
+
+
+class RuntimeTelemetryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evaluation_id: UUID
+    evaluator_strategy: str = "generic"
+    build_success: Optional[bool] = None
+    build_exit_code: Optional[int] = None
+    startup_ready: Optional[bool] = None
+    startup_port: Optional[int] = None
+    latency_p95_ms: Optional[float] = None
+    total_http_requests: int = 0
+    error_5xx_requests: int = 0
+    failure_code: Optional[str] = None
+    failure_reason: Optional[str] = None
+    observations: List[dict] = Field(default_factory=list)
+
+
+class AIInterpretationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evaluation_id: UUID
+    provider: str
+    model_name: str
+    prompt_version: str = "1.0.0"
+    executive_summary: str
+    architectural_assessment: str
+    security_risk_narrative: str
+    runtime_failure_root_cause: Optional[str] = None
+    top_strengths: List[str] = Field(default_factory=list)
+    critical_risks: List[str] = Field(default_factory=list)
+    recommendations: List[dict] = Field(default_factory=list)
+    tokens_consumed: Optional[int] = None
+    duration_ms: Optional[int] = None
+    is_fallback: bool = False
+
+
+class EvaluationHistoryItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    repository_id: UUID
+    status: EvaluationStatus
+    commit_sha: Optional[str] = None
+    overall_score: Optional[Decimal] = None
+    grade: Optional[LetterGrade] = None
+    created_at: datetime
+    duration_ms: Optional[int] = None

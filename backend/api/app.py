@@ -7,8 +7,14 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
 from backend.api.errors import register_error_handlers
+from backend.api.routes.evaluations import router as evaluations_router
 from backend.api.routes.health import router as health_router
+from backend.api.routes.repositories import router as repositories_router
 from backend.core.config import settings
 from backend.observability.logger import get_logger
 from backend.observability.middleware import CorrelationIdMiddleware
@@ -57,8 +63,20 @@ def create_app() -> FastAPI:
 
     # 5. Versioned API Router (/api/v1)
     api_v1_router = APIRouter(prefix=settings.API_V1_PREFIX)
-    # Placeholder for domain routes to be added in Phase 06+
+    api_v1_router.include_router(repositories_router)
+    api_v1_router.include_router(evaluations_router)
     app.include_router(api_v1_router)
+
+    # 6. Static Web Dashboard Mount
+    static_dir = Path(__file__).resolve().parent.parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+        @app.get("/", include_in_schema=False)
+        @app.get("/dashboard", include_in_schema=False)
+        async def serve_dashboard() -> FileResponse:
+            index_path = static_dir / "index.html"
+            return FileResponse(str(index_path))
 
     return app
 
