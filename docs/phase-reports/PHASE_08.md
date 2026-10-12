@@ -217,7 +217,7 @@ tests/unit/test_validator.py::test_reject_malicious_or_invalid_git_refs[aaaaaaaa
 ## 7. Commit Information
 
 - **Required Commit Message:** `phase(08): implement static analysis adapters`
-- **Commit SHA:** Pending commit gate execution
+- **Commit SHA:** `92009e67e1fa33e7ba261b8dc6f3a2df6790ac65`
 
 ---
 
