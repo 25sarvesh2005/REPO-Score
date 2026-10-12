@@ -181,4 +181,4 @@ Markdown report written to: reports\regression_summary.md
 ## 7. Commit Verification
 
 - **Commit Message:** `phase(16): add evaluation observability`
-- **Resulting Commit SHA:** [To be recorded post-commit]
+- **Resulting Commit SHA:** `fa9a6ac`
