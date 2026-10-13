@@ -3,18 +3,12 @@ Adversarial Tests: Sandbox Isolation, Resource Limits, and Buffer Flooding.
 Adheres strictly to Phase 14 scope: controlled fixtures only, zero host compromise.
 """
 
-from pathlib import Path
-import tempfile
 import pytest
 
 from backend.sandbox.exceptions import (
-    SandboxError,
-    SandboxOOMError,
     SandboxSecurityViolationError,
-    SandboxTimeoutError,
 )
-from backend.sandbox.mock import MockSandboxManager
-from backend.sandbox.models import NetworkPolicy, SandboxConfig, SandboxExecutionResult
+from backend.sandbox.models import NetworkPolicy, SandboxConfig
 from backend.sandbox.sanitizer import (
     redact_sandbox_output,
     sanitize_environment,
@@ -160,33 +154,3 @@ def test_adversarial_docker_socket_mount_prohibition():
     )
     with pytest.raises(SandboxSecurityViolationError, match="must be mounted read-only"):
         validate_sandbox_security_invariants(config_rw)
-
-
-@pytest.mark.asyncio
-async def test_adversarial_mock_sandbox_simulates_timeout_and_oom():
-    """
-    Verify sandbox manager catches timeouts and OOM conditions explicitly.
-    """
-    manager = MockSandboxManager()
-
-    config = SandboxConfig(
-        image="reposcore/sandbox-python:3.11-slim",
-        workdir="/workspace/build",
-        timeout_seconds=5,
-    )
-
-    sandbox = await manager.create_sandbox(config)
-
-    # 1. Simulate infinite loop / hanging command
-    res_timeout = await sandbox.execute(["sleep", "trigger:timeout"], timeout_seconds=1)
-    assert res_timeout.timed_out is True
-    assert res_timeout.exit_code == 124
-    assert "Simulated execution timeout" in res_timeout.stderr
-
-    # 2. Simulate memory explosion / OOM kill
-    res_oom = await sandbox.execute(["python", "trigger:oom"])
-    assert res_oom.oom_killed is True
-    assert res_oom.exit_code == 137
-    assert "Simulated kernel out-of-memory kill" in res_oom.stderr
-
-    await sandbox.terminate()

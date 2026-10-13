@@ -4,9 +4,9 @@ Statically detects hardcoded tokens, keys, credentials, and certificates across 
 """
 
 import os
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
 
 from backend.analyzers.interface import BaseAnalyzer
 from backend.analyzers.models import (
@@ -18,7 +18,7 @@ from backend.analyzers.models import (
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
 
 # High-fidelity regex patterns for credential detection
-SECRET_RULES: List[Tuple[str, str, re.Pattern, SeverityLevel, str]] = [
+SECRET_RULES: list[tuple[str, str, re.Pattern, SeverityLevel, str]] = [
     (
         "SEC-001-GITHUB-TOKEN",
         "Hardcoded GitHub Personal Access Token",
@@ -57,16 +57,33 @@ SECRET_RULES: List[Tuple[str, str, re.Pattern, SeverityLevel, str]] = [
     (
         "SEC-006-GENERIC-API-KEY",
         "Suspected Hardcoded API Key or Secret Assignment",
-        re.compile(r"""(?i)(?:api_key|apikey|secret_key|client_secret|auth_token)\s*=\s*['"][0-9a-zA-Z_-]{20,}['"]"""),
+        re.compile(
+            r"""(?i)(?:api_key|apikey|secret_key|client_secret|auth_token)\s*=\s*['"][0-9a-zA-Z_-]{20,}['"]"""
+        ),
         SeverityLevel.HIGH,
         "Do not store plaintext API keys in source files; load them from environment configuration.",
     ),
 ]
 
 IGNORED_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2",
-    ".ttf", ".eot", ".zip", ".tar", ".gz", ".pyc", ".lock", ".min.js",
-    ".min.css", ".map",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".svg",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".pyc",
+    ".lock",
+    ".min.js",
+    ".min.css",
+    ".map",
 }
 
 
@@ -86,19 +103,23 @@ class SecretScannerAnalyzer(BaseAnalyzer):
             description="Detects exposed GitHub PATs, AWS keys, private keys, database credentials, and API secrets.",
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         return True  # Applicable across all languages and repository types
 
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
-        findings: List[NormalizedFinding] = []
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
+        findings: list[NormalizedFinding] = []
         resolved_root = snapshot_path.resolve()
 
         for root, dirs, files in os.walk(resolved_root):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}
+            ]
 
             for filename in files:
                 file_path = Path(root) / filename
@@ -135,7 +156,9 @@ class SecretScannerAnalyzer(BaseAnalyzer):
                             # Sanitize snippet: mask the secret value partially
                             matched_secret = match.group(0)
                             masked_secret = (
-                                matched_secret[:4] + "*" * (len(matched_secret) - 8) + matched_secret[-4:]
+                                matched_secret[:4]
+                                + "*" * (len(matched_secret) - 8)
+                                + matched_secret[-4:]
                                 if len(matched_secret) > 8
                                 else "[REDACTED_SECRET]"
                             )

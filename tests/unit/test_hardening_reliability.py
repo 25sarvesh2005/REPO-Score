@@ -3,27 +3,25 @@ Hardening, Reliability, Rate Limiting, and DLQ Tests.
 Adheres strictly to Phase 17 specifications, FAILURE_MODEL.md, and AGENTS Prime Directives.
 """
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
 import uuid
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.responses import JSONResponse
 
 from backend.api.rate_limiter import RateLimitingMiddleware
-from backend.core.config import settings
 from backend.core.queue import InMemoryJobQueue
 from backend.database.models import Evaluation
 from backend.pipeline.orchestrator import EvaluationPipelineOrchestrator
 from backend.pipeline.worker import EvaluationWorker
-from backend.sandbox.mock import MockSandboxManager
-from backend.sandbox.models import SandboxConfig
-
+from backend.sandbox.docker import DockerSandboxManager
 
 # =========================================================================
 # 1. Rate Limiting Middleware Tests
 # =========================================================================
+
 
 def test_rate_limiter_within_limit():
     """Verify requests within rate limit pass through with rate limit headers."""
@@ -97,6 +95,7 @@ def test_rate_limiter_exempt_paths():
 # 2. Dead-Letter Queue (DLQ) & Worker Recovery Tests
 # =========================================================================
 
+
 @pytest.mark.asyncio
 async def test_dead_letter_queue_push_and_inspection():
     """Verify job queue stores failed tasks into DLQ with reason and timestamp."""
@@ -132,7 +131,7 @@ async def test_worker_crash_pushes_to_dlq():
         status="QUEUED",
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     mock_session = AsyncMock()
@@ -176,26 +175,19 @@ async def test_worker_crash_pushes_to_dlq():
 # 3. Sandbox Orphan Sweeper Simulation Tests
 # =========================================================================
 
+
 @pytest.mark.asyncio
-async def test_mock_sandbox_orphan_cleanup():
-    """Verify sandbox manager orphan cleanup terminates dangling active containers."""
-    manager = MockSandboxManager()
-    config = SandboxConfig(
-        image="reposcore/sandbox-python:3.11-slim",
-        workdir="/workspace/build",
-    )
+async def test_docker_sandbox_orphan_cleanup():
+    """Verify DockerSandboxManager orphan cleanup issues correct docker filter and removal commands."""
+    manager = DockerSandboxManager()
+    with patch.object(manager, "is_available", AsyncMock(return_value=True)):
+        mock_proc_ps = AsyncMock()
+        mock_proc_ps.communicate = AsyncMock(return_value=(b"cid1\ncid2\n", b""))
+        mock_proc_rm = AsyncMock()
+        mock_proc_rm.wait = AsyncMock(return_value=0)
 
-    # Spawn 3 sandboxes
-    sbx1 = await manager.create_sandbox(config)
-    sbx2 = await manager.create_sandbox(config)
-    sbx3 = await manager.create_sandbox(config)
-
-    assert len(manager._active_sandboxes) == 3
-
-    # Run orphan cleanup sweep
-    purged = await manager.cleanup_orphans(older_than_seconds=60)
-    assert purged == 3
-    assert len(manager._active_sandboxes) == 0
-    assert sbx1.state.value == "TERMINATED"
-    assert sbx2.state.value == "TERMINATED"
-    assert sbx3.state.value == "TERMINATED"
+        with patch(
+            "asyncio.create_subprocess_exec", side_effect=[mock_proc_ps, mock_proc_rm, mock_proc_rm]
+        ):
+            purged = await manager.cleanup_orphans(older_than_seconds=60)
+            assert purged == 2

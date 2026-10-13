@@ -7,35 +7,31 @@ resilient, auditable lifecycle.
 Adheres strictly to EVALUATION_LIFECYCLE.md, Prime Directives #1-#6, and ADR-001 through ADR-010.
 """
 
-from datetime import datetime, timezone
-from decimal import Decimal
-import logging
-from pathlib import Path
+import contextlib
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.ai.mock_provider import MockProvider
 from backend.ai.service import AIInterpretationService
 from backend.analyzers.models import NormalizedFinding
 from backend.analyzers.registry import AnalyzerRegistry
 from backend.api.schemas.contracts import (
     EvaluationStatus,
-    EvidenceCategory,
-    LetterGrade,
-    SeverityLevel,
 )
 from backend.core.queue import IJobQueue, get_job_queue
 from backend.database.models import (
     Evaluation,
-    EvaluationEvent,
     EvaluationStep,
     Evidence,
     Repository,
     RepositorySnapshot,
+)
+from backend.database.models import (
     RuntimeObservation as RuntimeObservationModel,
 )
 from backend.observability.logger import (
@@ -54,9 +50,9 @@ from backend.repository.detector import detect_technologies_and_category
 from backend.repository.models import TechnologyDetectionResult
 from backend.repository.service import RepositoryIngestionService
 from backend.runtime.dispatcher import RuntimeDispatcher
-from backend.runtime.models import EvaluatorType, RuntimeFailureCode, RuntimeObservation
+from backend.runtime.models import RuntimeFailureCode, RuntimeObservation
+from backend.sandbox.docker import DockerSandboxManager
 from backend.sandbox.interface import ISandboxManager
-from backend.sandbox.mock import MockSandboxManager
 from backend.scoring.calculator import DeterministicScoringEngine
 from backend.scoring.models import ScorecardResult
 
@@ -68,20 +64,24 @@ class EvaluationPipelineOrchestrator:
     Autonomous coordinator executing repository evaluation lifecycle end-to-end.
     """
 
+    @staticmethod
+    def _resolve_sandbox_manager() -> ISandboxManager:
+        return DockerSandboxManager()
+
     def __init__(
         self,
-        ingestion_service: Optional[RepositoryIngestionService] = None,
-        analyzer_registry: Optional[AnalyzerRegistry] = None,
-        runtime_dispatcher: Optional[RuntimeDispatcher] = None,
-        sandbox_manager: Optional[ISandboxManager] = None,
-        scoring_engine: Optional[DeterministicScoringEngine] = None,
-        ai_service: Optional[AIInterpretationService] = None,
-        job_queue: Optional[IJobQueue] = None,
+        ingestion_service: RepositoryIngestionService | None = None,
+        analyzer_registry: AnalyzerRegistry | None = None,
+        runtime_dispatcher: RuntimeDispatcher | None = None,
+        sandbox_manager: ISandboxManager | None = None,
+        scoring_engine: DeterministicScoringEngine | None = None,
+        ai_service: AIInterpretationService | None = None,
+        job_queue: IJobQueue | None = None,
     ) -> None:
         self.ingestion_service = ingestion_service or RepositoryIngestionService()
         self.analyzer_registry = analyzer_registry or AnalyzerRegistry()
         self.runtime_dispatcher = runtime_dispatcher or RuntimeDispatcher()
-        self.sandbox_manager = sandbox_manager or MockSandboxManager()
+        self.sandbox_manager = sandbox_manager or self._resolve_sandbox_manager()
         self.scoring_engine = scoring_engine or DeterministicScoringEngine()
         self.ai_service = ai_service or AIInterpretationService()
         self.job_queue = job_queue or get_job_queue()
@@ -92,15 +92,15 @@ class EvaluationPipelineOrchestrator:
         evaluation_id: uuid.UUID,
         repository_id: uuid.UUID,
         ref: str = "main",
-        options: Optional[Dict[str, Any]] = None,
-        fixture_snapshot_path: Optional[Path] = None,
+        options: dict[str, Any] | None = None,
+        fixture_snapshot_path: Path | None = None,
     ) -> PipelineExecutionResult:
         """
         Execute full end-to-end evaluation flow.
         """
         opts = options or {}
         enable_ai = opts.get("enable_ai_reasoning", True)
-        steps_executed: List[StepExecutionLog] = []
+        steps_executed: list[StepExecutionLog] = []
         t0 = time.monotonic()
 
         # 1. Fetch evaluation & repository records
@@ -118,16 +118,18 @@ class EvaluationPipelineOrchestrator:
         evaluation_id_ctx.set(str(evaluation_id))
         correlation_id_ctx.set(str(evaluation.correlation_id))
 
-        evaluation.started_at = datetime.now(timezone.utc)
-        await self._publish_event(evaluation_id, "evaluation.lifecycle.started", {"status": "INGESTING"})
+        evaluation.started_at = datetime.now(UTC)
+        await self._publish_event(
+            evaluation_id, "evaluation.lifecycle.started", {"status": "INGESTING"}
+        )
         await session.commit()
 
-        snapshot_path: Optional[Path] = fixture_snapshot_path
-        detection: Optional[TechnologyDetectionResult] = None
-        all_evidence: List[NormalizedFinding] = []
-        runtime_obs: Optional[RuntimeObservation] = None
-        partial_status: Optional[str] = None
-        scorecard: Optional[ScorecardResult] = None
+        snapshot_path: Path | None = fixture_snapshot_path
+        detection: TechnologyDetectionResult | None = None
+        all_evidence: list[NormalizedFinding] = []
+        runtime_obs: RuntimeObservation | None = None
+        partial_status: str | None = None
+        scorecard: ScorecardResult | None = None
 
         try:
             # -------------------------------------------------------------
@@ -136,22 +138,34 @@ class EvaluationPipelineOrchestrator:
             if await self._check_cancellation(evaluation_id, session, evaluation, steps_executed):
                 return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
-            step_log = await self._start_step(session, evaluation_id, EvaluationStatus.INGESTING, "INGESTING")
+            step_log = await self._start_step(
+                session, evaluation_id, EvaluationStatus.INGESTING, "INGESTING"
+            )
             try:
                 if not snapshot_path or not snapshot_path.exists():
-                    ingest_result = await self.ingestion_service.ingest_repository(repository.url, ref=ref)
-                    if not ingest_result.success:
-                        raise RuntimeError(f"Repository ingestion failed: {ingest_result.error_message}")
+                    ingest_result = await self.ingestion_service.ingest_repository(
+                        repository.url, ref=ref
+                    )
+                    if not ingest_result.success or not ingest_result.snapshot_path:
+                        raise RuntimeError(
+                            f"Repository ingestion failed: {ingest_result.error_message}"
+                        )
                     snapshot_path = Path(ingest_result.snapshot_path)
-                    detection = ingest_result.technologies or detect_technologies_and_category(snapshot_path)
+                    detection = ingest_result.technologies or detect_technologies_and_category(
+                        snapshot_path
+                    )
                 else:
                     detection = detect_technologies_and_category(snapshot_path)
 
                 # Update snapshot DB record
-                snap_stmt = select(RepositorySnapshot).where(RepositorySnapshot.id == evaluation.snapshot_id)
+                snap_stmt = select(RepositorySnapshot).where(
+                    RepositorySnapshot.id == evaluation.snapshot_id
+                )
                 snapshot_rec = (await session.execute(snap_stmt)).scalar_one_or_none()
                 if snapshot_rec:
-                    snapshot_rec.detected_languages = {detection.primary_language: 100} if detection.primary_language else {}
+                    snapshot_rec.detected_languages = (
+                        {detection.primary_language: 100} if detection.primary_language else {}
+                    )
                     snapshot_rec.detected_frameworks = detection.detected_frameworks
                     snapshot_rec.detected_entrypoints = detection.detected_entrypoints
                     snapshot_rec.storage_path = str(snapshot_path)
@@ -159,7 +173,9 @@ class EvaluationPipelineOrchestrator:
                 await self._complete_step(session, step_log, StepStatus.SUCCESS)
                 steps_executed.append(step_log)
             except Exception as exc:
-                await self._complete_step(session, step_log, StepStatus.FAILURE, error_message=str(exc))
+                await self._complete_step(
+                    session, step_log, StepStatus.FAILURE, error_message=str(exc)
+                )
                 steps_executed.append(step_log)
                 evaluation.status = EvaluationStatus.FAILED
                 evaluation.error_summary = f"Ingestion error: {exc}"
@@ -172,28 +188,36 @@ class EvaluationPipelineOrchestrator:
             if await self._check_cancellation(evaluation_id, session, evaluation, steps_executed):
                 return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
-            step_log = await self._start_step(session, evaluation_id, EvaluationStatus.ANALYZING, "ANALYZING")
+            step_log = await self._start_step(
+                session, evaluation_id, EvaluationStatus.ANALYZING, "ANALYZING"
+            )
             try:
                 tech_stack = {
                     "primary_language": detection.primary_language,
                     "frameworks": detection.detected_frameworks,
                     "archetype": detection.evaluator_category.value,
                 }
-                findings = await self.analyzer_registry.execute_all(snapshot_path, tech_stack=tech_stack)
+                findings = await self.analyzer_registry.execute_all(
+                    snapshot_path, tech_stack=tech_stack
+                )
                 all_evidence.extend(findings)
 
                 # Record metrics for discovered findings
                 for f in findings:
                     record_finding_metric(
-                        severity=f.severity.value if hasattr(f.severity, "value") else str(f.severity),
-                        category=f.category.value if hasattr(f.category, "value") else str(f.category),
+                        severity=f.severity.value
+                        if hasattr(f.severity, "value")
+                        else str(f.severity),
+                        category=f.category.value
+                        if hasattr(f.category, "value")
+                        else str(f.category),
                     )
 
                 # Persist evidence records to database
                 for f in findings:
                     loc_dict = (
                         f.location.model_dump()
-                        if hasattr(f.location, "model_dump")
+                        if f.location is not None and hasattr(f.location, "model_dump")
                         else (f.location if isinstance(f.location, dict) else None)
                     )
                     ev_row = Evidence(
@@ -213,10 +237,17 @@ class EvaluationPipelineOrchestrator:
                     )
                     session.add(ev_row)
 
-                await self._complete_step(session, step_log, StepStatus.SUCCESS, metadata={"findings_count": len(findings)})
+                await self._complete_step(
+                    session,
+                    step_log,
+                    StepStatus.SUCCESS,
+                    metadata={"findings_count": len(findings)},
+                )
                 steps_executed.append(step_log)
             except Exception as exc:
-                await self._complete_step(session, step_log, StepStatus.FAILURE, error_message=str(exc))
+                await self._complete_step(
+                    session, step_log, StepStatus.FAILURE, error_message=str(exc)
+                )
                 steps_executed.append(step_log)
                 evaluation.status = EvaluationStatus.FAILED
                 evaluation.error_summary = f"Static analysis error: {exc}"
@@ -229,7 +260,9 @@ class EvaluationPipelineOrchestrator:
             if await self._check_cancellation(evaluation_id, session, evaluation, steps_executed):
                 return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
-            step_build = await self._start_step(session, evaluation_id, EvaluationStatus.BUILDING, "BUILDING")
+            step_build = await self._start_step(
+                session, evaluation_id, EvaluationStatus.BUILDING, "BUILDING"
+            )
             runtime_obs = await self.runtime_dispatcher.execute_evaluation(
                 snapshot_path=snapshot_path,
                 detection=detection,
@@ -240,8 +273,17 @@ class EvaluationPipelineOrchestrator:
             # Persist observations to DB
             self._persist_runtime_observations(session, evaluation_id, runtime_obs)
 
-            if runtime_obs.failure_code in {RuntimeFailureCode.BUILD_FAILURE, RuntimeFailureCode.DEPENDENCY_INSTALL_FAILED}:
-                await self._complete_step(session, step_build, StepStatus.FAILURE, error_message=runtime_obs.failure_reason, exit_code=1)
+            if runtime_obs.failure_code in {
+                RuntimeFailureCode.BUILD_FAILURE,
+                RuntimeFailureCode.DEPENDENCY_INSTALL_FAILED,
+            }:
+                await self._complete_step(
+                    session,
+                    step_build,
+                    StepStatus.FAILURE,
+                    error_message=runtime_obs.failure_reason,
+                    exit_code=1,
+                )
                 steps_executed.append(step_build)
                 partial_status = "BUILD_FAILED"
             else:
@@ -249,16 +291,28 @@ class EvaluationPipelineOrchestrator:
                 steps_executed.append(step_build)
 
                 # STARTING & TESTING steps
-                step_start = await self._start_step(session, evaluation_id, EvaluationStatus.STARTING, "STARTING")
-                if runtime_obs.failure_code in {RuntimeFailureCode.STARTUP_TIMEOUT, RuntimeFailureCode.CRASH_ON_BOOT}:
-                    await self._complete_step(session, step_start, StepStatus.FAILURE, error_message=runtime_obs.failure_reason)
+                step_start = await self._start_step(
+                    session, evaluation_id, EvaluationStatus.STARTING, "STARTING"
+                )
+                if runtime_obs.failure_code in {
+                    RuntimeFailureCode.STARTUP_TIMEOUT,
+                    RuntimeFailureCode.CRASH_ON_BOOT,
+                }:
+                    await self._complete_step(
+                        session,
+                        step_start,
+                        StepStatus.FAILURE,
+                        error_message=runtime_obs.failure_reason,
+                    )
                     steps_executed.append(step_start)
                     partial_status = "STARTUP_FAILED"
                 else:
                     await self._complete_step(session, step_start, StepStatus.SUCCESS)
                     steps_executed.append(step_start)
 
-                    step_test = await self._start_step(session, evaluation_id, EvaluationStatus.TESTING, "TESTING")
+                    step_test = await self._start_step(
+                        session, evaluation_id, EvaluationStatus.TESTING, "TESTING"
+                    )
                     await self._complete_step(session, step_test, StepStatus.SUCCESS)
                     steps_executed.append(step_test)
 
@@ -268,7 +322,9 @@ class EvaluationPipelineOrchestrator:
             if await self._check_cancellation(evaluation_id, session, evaluation, steps_executed):
                 return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
-            step_score = await self._start_step(session, evaluation_id, EvaluationStatus.SCORING, "SCORING")
+            step_score = await self._start_step(
+                session, evaluation_id, EvaluationStatus.SCORING, "SCORING"
+            )
             try:
                 scorecard = self.scoring_engine.compute_scorecard(
                     evaluation_id=evaluation_id,
@@ -280,11 +336,16 @@ class EvaluationPipelineOrchestrator:
                     session,
                     step_score,
                     StepStatus.SUCCESS,
-                    metadata={"overall_score": float(scorecard.overall_score), "grade": scorecard.grade.value},
+                    metadata={
+                        "overall_score": float(scorecard.overall_score),
+                        "grade": scorecard.grade.value,
+                    },
                 )
                 steps_executed.append(step_score)
             except Exception as exc:
-                await self._complete_step(session, step_score, StepStatus.FAILURE, error_message=str(exc))
+                await self._complete_step(
+                    session, step_score, StepStatus.FAILURE, error_message=str(exc)
+                )
                 steps_executed.append(step_score)
                 evaluation.status = EvaluationStatus.FAILED
                 evaluation.error_summary = f"Scoring engine error: {exc}"
@@ -295,10 +356,14 @@ class EvaluationPipelineOrchestrator:
             # STAGE 5: AI INTERPRETATION (Advisory Qualitative Synthesis)
             # -------------------------------------------------------------
             if enable_ai and scorecard:
-                if await self._check_cancellation(evaluation_id, session, evaluation, steps_executed):
+                if await self._check_cancellation(
+                    evaluation_id, session, evaluation, steps_executed
+                ):
                     return self._build_result(evaluation, steps_executed, is_cancelled=True)
 
-                step_ai = await self._start_step(session, evaluation_id, EvaluationStatus.AI_INTERPRETATION, "AI_INTERPRETATION")
+                step_ai = await self._start_step(
+                    session, evaluation_id, EvaluationStatus.AI_INTERPRETATION, "AI_INTERPRETATION"
+                )
                 ai_t0 = time.monotonic()
                 try:
                     ai_result = await self.ai_service.interpret_evaluation(
@@ -314,18 +379,25 @@ class EvaluationPipelineOrchestrator:
                         duration_seconds=ai_duration_s,
                     )
                     await self.ai_service.persist_analysis(session, evaluation_id, ai_result)
-                    await self._complete_step(session, step_ai, StepStatus.SUCCESS, metadata={"is_fallback": ai_result.is_fallback})
+                    await self._complete_step(
+                        session,
+                        step_ai,
+                        StepStatus.SUCCESS,
+                        metadata={"is_fallback": ai_result.is_fallback},
+                    )
                     steps_executed.append(step_ai)
                 except Exception as exc:
                     logger.warning(f"AI Interpretation failed, degrading gracefully: {exc}")
-                    await self._complete_step(session, step_ai, StepStatus.FAILURE, error_message=str(exc))
+                    await self._complete_step(
+                        session, step_ai, StepStatus.FAILURE, error_message=str(exc)
+                    )
                     steps_executed.append(step_ai)
 
             # -------------------------------------------------------------
             # FINALIZATION: Terminal State Transition
             # -------------------------------------------------------------
             total_duration_ms = int((time.monotonic() - t0) * 1000)
-            evaluation.completed_at = datetime.now(timezone.utc)
+            evaluation.completed_at = datetime.now(UTC)
             evaluation.duration_ms = total_duration_ms
 
             if partial_status:
@@ -343,7 +415,10 @@ class EvaluationPipelineOrchestrator:
             await self._publish_event(
                 evaluation_id,
                 "evaluation.lifecycle.completed",
-                {"status": evaluation.status.value, "overall_score": float(scorecard.overall_score) if scorecard else 0.0},
+                {
+                    "status": evaluation.status.value,
+                    "overall_score": float(scorecard.overall_score) if scorecard else 0.0,
+                },
             )
             await session.commit()
 
@@ -362,7 +437,7 @@ class EvaluationPipelineOrchestrator:
         except Exception as unhandled_exc:
             logger.error(f"Catastrophic pipeline execution failure: {unhandled_exc}", exc_info=True)
             evaluation.status = EvaluationStatus.FAILED
-            evaluation.completed_at = datetime.now(timezone.utc)
+            evaluation.completed_at = datetime.now(UTC)
             evaluation.duration_ms = int((time.monotonic() - t0) * 1000)
             evaluation.error_summary = f"Catastrophic failure: {unhandled_exc}"
             record_evaluation_metric(
@@ -379,7 +454,9 @@ class EvaluationPipelineOrchestrator:
         status_enum: EvaluationStatus,
         step_name: str,
     ) -> StepExecutionLog:
-        evaluation = (await session.execute(select(Evaluation).where(Evaluation.id == evaluation_id))).scalar_one()
+        evaluation = (
+            await session.execute(select(Evaluation).where(Evaluation.id == evaluation_id))
+        ).scalar_one()
         evaluation.status = status_enum
         await self._publish_event(evaluation_id, "evaluation.step.started", {"step": step_name})
         await session.flush()
@@ -389,7 +466,7 @@ class EvaluationPipelineOrchestrator:
             evaluation_id=evaluation_id,
             step_name=step_name,
             status="RUNNING",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         session.add(step_db)
         await session.commit()
@@ -398,6 +475,8 @@ class EvaluationPipelineOrchestrator:
             step_name=step_name,
             status=StepStatus.RUNNING,
             started_at=step_db.started_at,
+            step_id=step_db.id,
+            evaluation_id=evaluation_id,
         )
 
     async def _complete_step(
@@ -405,28 +484,48 @@ class EvaluationPipelineOrchestrator:
         session: AsyncSession,
         log: StepExecutionLog,
         status: StepStatus,
-        exit_code: Optional[int] = None,
-        error_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        exit_code: int | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         log.status = status
-        log.completed_at = datetime.now(timezone.utc)
+        log.completed_at = datetime.now(UTC)
         start_ts = log.started_at
         if start_ts and start_ts.tzinfo is None:
-            start_ts = start_ts.replace(tzinfo=timezone.utc)
+            start_ts = start_ts.replace(tzinfo=UTC)
         completed_ts = log.completed_at
         if completed_ts and completed_ts.tzinfo is None:
-            completed_ts = completed_ts.replace(tzinfo=timezone.utc)
+            completed_ts = completed_ts.replace(tzinfo=UTC)
         log.duration_ms = int((completed_ts - start_ts).total_seconds() * 1000) if start_ts else 0
         log.exit_code = exit_code
         log.error_message = error_message
         log.metadata = metadata or {}
 
-        # Update step in DB
-        stmt = select(EvaluationStep).where(
-            EvaluationStep.step_name == log.step_name,
-            EvaluationStep.status == "RUNNING",
-        ).order_by(EvaluationStep.created_at.desc())
+        # Update step in DB - match by exact step_id, or scope to evaluation_id
+        step_id = getattr(log, "step_id", None)
+        eval_id = getattr(log, "evaluation_id", None)
+        if step_id:
+            stmt = select(EvaluationStep).where(EvaluationStep.id == step_id)
+        elif eval_id:
+            stmt = (
+                select(EvaluationStep)
+                .where(
+                    EvaluationStep.evaluation_id == eval_id,
+                    EvaluationStep.step_name == log.step_name,
+                    EvaluationStep.status == "RUNNING",
+                )
+                .order_by(EvaluationStep.created_at.desc())
+            )
+        else:
+            stmt = (
+                select(EvaluationStep)
+                .where(
+                    EvaluationStep.step_name == log.step_name,
+                    EvaluationStep.status == "RUNNING",
+                )
+                .order_by(EvaluationStep.created_at.desc())
+            )
+
         step_db = (await session.execute(stmt)).scalars().first()
         if step_db:
             step_db.status = status.value
@@ -445,13 +544,15 @@ class EvaluationPipelineOrchestrator:
         )
         logger.info(
             f"Step '{log.step_name}' finished with status '{status.value}' ({log.duration_ms}ms)",
-            extra={"extra_data": {
-                "step": log.step_name,
-                "status": status.value,
-                "duration_ms": log.duration_ms,
-                "exit_code": exit_code,
-                "error_message": error_message,
-            }},
+            extra={
+                "extra_data": {
+                    "step": log.step_name,
+                    "status": status.value,
+                    "duration_ms": log.duration_ms,
+                    "exit_code": exit_code,
+                    "error_message": error_message,
+                }
+            },
         )
 
     async def _check_cancellation(
@@ -459,11 +560,11 @@ class EvaluationPipelineOrchestrator:
         evaluation_id: uuid.UUID,
         session: AsyncSession,
         evaluation: Evaluation,
-        steps: List[StepExecutionLog],
+        steps: list[StepExecutionLog],
     ) -> bool:
         if await self.job_queue.is_cancelled(evaluation_id):
             evaluation.status = EvaluationStatus.CANCELLED
-            evaluation.completed_at = datetime.now(timezone.utc)
+            evaluation.completed_at = datetime.now(UTC)
             evaluation.error_summary = "Evaluation cancelled by user request."
             await session.commit()
             return True
@@ -476,58 +577,66 @@ class EvaluationPipelineOrchestrator:
         obs: RuntimeObservation,
     ) -> None:
         if obs.build_result:
-            session.add(RuntimeObservationModel(
-                id=uuid.uuid4(),
-                evaluation_id=evaluation_id,
-                observation_type="BUILD",
-                metadata_json={
-                    "exit_code": obs.build_result.exit_code,
-                    "success": obs.build_result.success,
-                    "duration_ms": obs.build_result.duration_ms,
-                },
-            ))
+            session.add(
+                RuntimeObservationModel(
+                    id=uuid.uuid4(),
+                    evaluation_id=evaluation_id,
+                    observation_type="BUILD",
+                    metadata_json={
+                        "exit_code": obs.build_result.exit_code,
+                        "success": obs.build_result.success,
+                        "duration_ms": obs.build_result.duration_ms,
+                    },
+                )
+            )
         if obs.startup_result:
-            session.add(RuntimeObservationModel(
-                id=uuid.uuid4(),
-                evaluation_id=evaluation_id,
-                observation_type="STARTUP",
-                metadata_json={
-                    "ready": obs.startup_result.ready,
-                    "port": obs.startup_result.port,
-                    "duration_ms": obs.startup_result.duration_ms,
-                },
-            ))
+            session.add(
+                RuntimeObservationModel(
+                    id=uuid.uuid4(),
+                    evaluation_id=evaluation_id,
+                    observation_type="STARTUP",
+                    metadata_json={
+                        "ready": obs.startup_result.ready,
+                        "port": obs.startup_result.port,
+                        "duration_ms": obs.startup_result.duration_ms,
+                    },
+                )
+            )
         if obs.http_metrics:
-            session.add(RuntimeObservationModel(
+            session.add(
+                RuntimeObservationModel(
+                    id=uuid.uuid4(),
+                    evaluation_id=evaluation_id,
+                    observation_type="HTTP_METRICS",
+                    metadata_json={
+                        "latency_p95_ms": obs.http_metrics.latency_p95_ms,
+                        "total_requests": obs.http_metrics.total_requests,
+                        "error_5xx_requests": obs.http_metrics.error_5xx_requests,
+                    },
+                )
+            )
+        session.add(
+            RuntimeObservationModel(
                 id=uuid.uuid4(),
                 evaluation_id=evaluation_id,
-                observation_type="HTTP_METRICS",
-                metadata_json={
-                    "latency_p95_ms": obs.http_metrics.latency_p95_ms,
-                    "total_requests": obs.http_metrics.total_requests,
-                    "error_5xx_requests": obs.http_metrics.error_5xx_requests,
-                },
-            ))
-        session.add(RuntimeObservationModel(
-            id=uuid.uuid4(),
-            evaluation_id=evaluation_id,
-            observation_type="STRATEGY",
-            metric_value_string=obs.evaluator_type.value,
-            metadata_json={"primary_language": obs.primary_language},
-        ))
+                observation_type="STRATEGY",
+                metric_value_string=obs.evaluator_type.value,
+                metadata_json={"primary_language": obs.primary_language},
+            )
+        )
 
-    async def _publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
-        try:
+    async def _publish_event(
+        self, evaluation_id: uuid.UUID, event_type: str, data: dict[str, Any]
+    ) -> None:
+        with contextlib.suppress(Exception):
             await self.job_queue.publish_event(evaluation_id, event_type, data)
-        except Exception:
-            pass
 
     def _build_result(
         self,
         evaluation: Evaluation,
-        steps: List[StepExecutionLog],
+        steps: list[StepExecutionLog],
         is_cancelled: bool = False,
-        error_summary: Optional[str] = None,
+        error_summary: str | None = None,
     ) -> PipelineExecutionResult:
         return PipelineExecutionResult(
             evaluation_id=evaluation.id,

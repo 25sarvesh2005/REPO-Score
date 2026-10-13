@@ -3,7 +3,6 @@ Unit tests for static technology detection and application category classificati
 """
 
 from pathlib import Path
-import pytest
 
 from backend.repository.detector import detect_technologies_and_category
 from backend.repository.models import EvaluatorCategory
@@ -24,8 +23,10 @@ dependencies = [
         """,
         encoding="utf-8",
     )
-    (repo / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
-    
+    (repo / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8"
+    )
+
     # Add CI/CD workflow
     workflows_dir = repo / ".github" / "workflows"
     workflows_dir.mkdir(parents=True)

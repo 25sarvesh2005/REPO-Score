@@ -3,6 +3,7 @@ Unit tests for AI subsystem models, schemas, and validation.
 """
 
 import uuid
+
 import pytest
 from pydantic import ValidationError
 

@@ -2,13 +2,9 @@
 Unit tests for Commit-Aware Regression Checker (Phase 15).
 """
 
-from unittest.mock import patch, MagicMock
-import pytest
-
 from scripts.ci_regression_checker import (
     map_files_to_test_targets,
     sanitize_text,
-    SUBSYSTEM_TEST_MAP,
 )
 
 

@@ -2,11 +2,12 @@
 Finding normalization, deduplication, and severity ranking engine.
 """
 
-from typing import Any, Dict, List
+from typing import Any
+
 from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import SeverityLevel
 
-SEVERITY_ORDER: Dict[SeverityLevel, int] = {
+SEVERITY_ORDER: dict[SeverityLevel, int] = {
     SeverityLevel.CRITICAL: 5,
     SeverityLevel.HIGH: 4,
     SeverityLevel.MEDIUM: 3,
@@ -21,12 +22,12 @@ class FindingNormalizer:
     """
 
     @staticmethod
-    def deduplicate(findings: List[NormalizedFinding]) -> List[NormalizedFinding]:
+    def deduplicate(findings: list[NormalizedFinding]) -> list[NormalizedFinding]:
         """
         Deduplicate findings based on cryptographic fingerprint.
         If duplicates exist, retains the finding with highest severity and confidence.
         """
-        seen: Dict[str, NormalizedFinding] = {}
+        seen: dict[str, NormalizedFinding] = {}
 
         for finding in findings:
             fp = finding.fingerprint
@@ -42,7 +43,7 @@ class FindingNormalizer:
         return list(seen.values())
 
     @staticmethod
-    def sort_by_severity(findings: List[NormalizedFinding]) -> List[NormalizedFinding]:
+    def sort_by_severity(findings: list[NormalizedFinding]) -> list[NormalizedFinding]:
         """
         Sort findings deterministically:
         Primary: Severity descending (CRITICAL -> INFO)
@@ -59,12 +60,12 @@ class FindingNormalizer:
         )
 
     @staticmethod
-    def summarize(findings: List[NormalizedFinding]) -> Dict[str, Any]:
+    def summarize(findings: list[NormalizedFinding]) -> dict[str, Any]:
         """
         Generate aggregate telemetry counts across severities and categories.
         """
         by_severity = {s.value: 0 for s in SeverityLevel}
-        by_category: Dict[str, int] = {}
+        by_category: dict[str, int] = {}
 
         for f in findings:
             by_severity[f.severity.value] = by_severity.get(f.severity.value, 0) + 1

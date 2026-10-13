@@ -3,10 +3,11 @@ Integration tests for Evaluation API endpoints (/api/v1/evaluations).
 Adheres strictly to Phase 12 validation and contract requirements.
 """
 
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
-import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,6 @@ from backend.api.app import create_app
 from backend.api.schemas.contracts import (
     EvaluationStatus,
     EvidenceCategory,
-    LetterGrade,
     SeverityLevel,
 )
 from backend.core.queue import InMemoryJobQueue, set_job_queue
@@ -25,7 +25,6 @@ from backend.database.models import (
     Evidence,
     Recommendation,
     Repository,
-    RepositorySnapshot,
     RuntimeObservation,
     Score,
     ScoreDimension,
@@ -70,7 +69,7 @@ def test_enqueue_evaluation_success(mock_db, mock_queue):
         default_branch="master",
         is_private=False,
         stars_count=75000,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     # Mock DB queries: 1) find repo, 2) find snapshot
@@ -130,8 +129,8 @@ def test_get_evaluation_status_polling(mock_db):
         status=EvaluationStatus.BUILDING,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        started_at=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
         steps=[],
     )
 
@@ -156,8 +155,8 @@ def test_cancel_active_evaluation(mock_db, mock_queue):
         status=EvaluationStatus.BUILDING,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        started_at=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
     )
 
     mock_result = MagicMock()
@@ -180,8 +179,8 @@ def test_cancel_terminal_evaluation_conflict(mock_db):
         status=EvaluationStatus.COMPLETED,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        started_at=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
     )
 
     mock_result = MagicMock()
@@ -203,7 +202,7 @@ def test_get_evaluation_score_finalized(mock_db):
         grade="A",
         total_deductions=Decimal("12.5"),
         total_credits=Decimal("0.0"),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         dimensions=[
             ScoreDimension(
                 id=uuid.uuid4(),
@@ -223,7 +222,7 @@ def test_get_evaluation_score_finalized(mock_db):
                         "calculated_delta": 20.0,
                     }
                 ],
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
         ],
     )
@@ -234,8 +233,8 @@ def test_get_evaluation_score_finalized(mock_db):
         status=EvaluationStatus.COMPLETED,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        started_at=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
         score=score,
         ai_analysis=None,
     )
@@ -263,8 +262,8 @@ def test_get_evaluation_score_still_running_conflict(mock_db):
         status=EvaluationStatus.ANALYZING,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        started_at=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
         score=None,
     )
 
@@ -297,7 +296,7 @@ def test_get_evaluation_evidence_paginated(mock_db):
         title="SQL Injection",
         description="Unsanitized parameter",
         location={"file_path": "app/db.py", "start_line": 20},
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     mock_res_eval = MagicMock()

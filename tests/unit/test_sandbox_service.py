@@ -3,10 +3,12 @@ Unit tests for SandboxService configuration factories and lifecycle context mana
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock
+
 import pytest
 
-from backend.sandbox.mock import MockSandboxManager
-from backend.sandbox.models import NetworkPolicy, SandboxState
+from backend.sandbox.interface import ISandboxManager
+from backend.sandbox.models import NetworkPolicy, SandboxExecutionResult, SandboxState
 from backend.sandbox.service import SandboxService
 
 
@@ -55,7 +57,22 @@ def test_build_node_sandbox_config(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_ephemeral_sandbox_lifecycle(tmp_path: Path) -> None:
-    mock_manager = MockSandboxManager()
+    mock_sbx = AsyncMock()
+    mock_sbx.state = SandboxState.RUNNING
+    mock_sbx.container_id = "test-sbx-123"
+    mock_sbx.execute = AsyncMock(
+        return_value=SandboxExecutionResult(
+            exit_code=0, stdout="Command executed: print('hello')", stderr=""
+        )
+    )
+
+    async def _terminate():
+        mock_sbx.state = SandboxState.TERMINATED
+
+    mock_sbx.terminate = AsyncMock(side_effect=_terminate)
+
+    mock_manager = AsyncMock(spec=ISandboxManager)
+    mock_manager.create_sandbox = AsyncMock(return_value=mock_sbx)
     service = SandboxService(manager=mock_manager)
 
     snapshot_dir = tmp_path / "lifecycle_snap"
@@ -70,12 +87,12 @@ async def test_ephemeral_sandbox_lifecycle(tmp_path: Path) -> None:
     async with service.ephemeral_sandbox(config) as sbx:
         captured_sandbox = sbx
         assert sbx.state == SandboxState.RUNNING
-        assert sbx.container_id.startswith("mock-sbx-")
+        assert sbx.container_id.startswith("test-sbx-")
 
         # Execute command inside sandbox
         res = await sbx.execute(["python", "-c", "print('hello')"])
         assert res.exit_code == 0
-        assert "Mock execution succeeded" in res.stdout
+        assert "Command executed" in res.stdout
 
     # Once exited from context manager, sandbox must be terminated
     assert captured_sandbox is not None

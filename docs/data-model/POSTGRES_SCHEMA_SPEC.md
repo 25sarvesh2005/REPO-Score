@@ -3,8 +3,7 @@
 > **Document:** `POSTGRES_SCHEMA_SPEC.md`  
 > **System:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
 > **Status:** Active / Persistence Baseline  
-> **Phase:** Phase 03 — Data Model and Persistence Design  
-> **Authority:** `phases/03_DATA_MODEL.md`, `phases/00_ARCHITECTURE.md`, `AGENTS.md`
+> **Authority:** [`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md), [`AGENTS.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/AGENTS.md)
 
 ---
 

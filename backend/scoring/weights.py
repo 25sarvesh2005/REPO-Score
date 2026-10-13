@@ -4,12 +4,14 @@ Adheres strictly to SCORING_ARCHITECTURE.md, ADR-004, and SCORE-001 through SCOR
 """
 
 from decimal import Decimal
-from typing import Dict, NamedTuple
+from typing import NamedTuple
+
 from backend.api.schemas.contracts import EvidenceCategory, LetterGrade
 
 
 class DimensionSpec(NamedTuple):
     """Specification and weight definition for an individual scorecard dimension."""
+
     category: EvidenceCategory
     name: str
     weight: Decimal
@@ -17,7 +19,7 @@ class DimensionSpec(NamedTuple):
 
 
 # The 10 discrete engineering dimensions with normalized weights summing to 1.000 (SCORE-001)
-DIMENSION_SPECIFICATIONS: Dict[EvidenceCategory, DimensionSpec] = {
+DIMENSION_SPECIFICATIONS: dict[EvidenceCategory, DimensionSpec] = {
     EvidenceCategory.CORRECTNESS: DimensionSpec(
         category=EvidenceCategory.CORRECTNESS,
         name="Correctness",
@@ -82,7 +84,7 @@ DIMENSION_SPECIFICATIONS: Dict[EvidenceCategory, DimensionSpec] = {
 
 # Verify at import time that dimension weights sum to exactly 1.000 (SCORE-001)
 TOTAL_WEIGHT = sum(spec.weight for spec in DIMENSION_SPECIFICATIONS.values())
-if TOTAL_WEIGHT != Decimal("1.00"):
+if Decimal("1.00") != TOTAL_WEIGHT:
     raise ValueError(f"Dimension weights must sum to exactly 1.00, got {TOTAL_WEIGHT}")
 
 

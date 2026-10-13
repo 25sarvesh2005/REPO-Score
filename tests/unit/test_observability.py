@@ -5,25 +5,14 @@ Adheres strictly to Phase 16 specifications and OBSERVABILITY_ARCHITECTURE.md.
 
 import json
 import logging
-from unittest.mock import patch
-import pytest
 
 from backend.observability.logger import (
     StructuredJSONFormatter,
     correlation_id_ctx,
     evaluation_id_ctx,
-    get_logger,
     redact_secrets,
 )
 from backend.observability.metrics import (
-    ACTIVE_SANDBOXES,
-    AI_INFERENCE_DURATION_SECONDS,
-    API_REQUESTS_TOTAL,
-    EVALUATION_DURATION_SECONDS,
-    EVALUATIONS_TOTAL,
-    QUEUE_DEPTH,
-    SECURITY_FINDINGS_TOTAL,
-    STEP_DURATION_SECONDS,
     generate_metrics_payload,
     record_ai_inference_metric,
     record_api_metric,
@@ -34,10 +23,10 @@ from backend.observability.metrics import (
     set_queue_depth,
 )
 
-
 # =========================================================================
 # 1. Secret Redaction Tests
 # =========================================================================
+
 
 def test_redact_redis_and_webhook_credentials():
     """Verify Redis passwords and Slack webhook URLs are sanitized."""
@@ -55,9 +44,7 @@ def test_redact_redis_and_webhook_credentials():
 def test_redact_private_key_blocks():
     """Verify private key blocks are completely redacted."""
     key_block = (
-        "-----BEGIN RSA PRIVATE KEY-----\n"
-        "MIIEowIBAAKCAQEA0Y1m...\n"
-        "-----END RSA PRIVATE KEY-----"
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Y1m...\n-----END RSA PRIVATE KEY-----"
     )
     redacted_key = redact_secrets(f"Loaded certificate:\n{key_block}\nReady.")
     assert "MIIEowIBAAKCAQEA" not in redacted_key
@@ -67,6 +54,7 @@ def test_redact_private_key_blocks():
 # =========================================================================
 # 2. Structured JSON Logger Tests
 # =========================================================================
+
 
 def test_structured_logger_extra_data_redaction():
     """Verify structured logger formats fields and redacts secrets within extra_data."""
@@ -134,6 +122,7 @@ def test_structured_logger_exception_formatting():
 # =========================================================================
 # 3. Prometheus Metrics & Scrape Endpoint Tests
 # =========================================================================
+
 
 def test_metrics_recording_helpers():
     """Verify all metric recording helper functions observe and increment Prometheus collectors."""

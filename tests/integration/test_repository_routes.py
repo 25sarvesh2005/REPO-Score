@@ -2,9 +2,10 @@
 Integration tests for Repository API endpoints (/api/v1/repositories).
 """
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
 import uuid
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +62,7 @@ def test_register_repository_already_exists(mock_db):
         default_branch="master",
         is_private=False,
         stars_count=75000,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = existing
@@ -96,7 +97,7 @@ def test_list_repositories(mock_db):
         default_branch="master",
         is_private=False,
         stars_count=75000,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     mock_result = MagicMock()
     mock_scalars = MagicMock()
@@ -122,7 +123,7 @@ def test_get_repository_by_id_found(mock_db):
         default_branch="master",
         is_private=False,
         stars_count=75000,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = repo

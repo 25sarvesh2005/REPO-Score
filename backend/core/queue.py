@@ -3,11 +3,12 @@ Distributed job queue abstraction, Redis implementation, and Dead-Letter Queue (
 Adheres strictly to FAILURE_MODEL.md, ADR-007, and Phase 17 resilience standards.
 """
 
-from abc import abstractmethod
-from datetime import datetime, timezone
 import json
-from typing import Any, Dict, Optional, Protocol, cast
 import uuid
+from abc import abstractmethod
+from datetime import UTC, datetime
+from typing import Any, Protocol, cast
+
 import redis.asyncio as aioredis
 
 from backend.core.config import settings
@@ -20,17 +21,19 @@ class IJobQueue(Protocol):
     """Protocol for RepoScore asynchronous evaluation queue and DLQ."""
 
     @abstractmethod
-    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
+    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: dict[str, Any]) -> None:
         """Enqueue an evaluation job for worker processing."""
         ...
 
     @abstractmethod
-    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+    async def dequeue_evaluation(self) -> dict[str, Any] | None:
         """Claim the next evaluation payload, or return ``None`` when the queue is empty."""
         ...
 
     @abstractmethod
-    async def publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
+    async def publish_event(
+        self, evaluation_id: uuid.UUID, event_type: str, data: dict[str, Any]
+    ) -> None:
         """Publish real-time event to SSE channel."""
         ...
 
@@ -45,7 +48,9 @@ class IJobQueue(Protocol):
         ...
 
     @abstractmethod
-    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
+    async def send_to_dlq(
+        self, evaluation_id: uuid.UUID, payload: dict[str, Any], reason: str
+    ) -> None:
         """Move an unrecoverable or failed task to the dead-letter queue."""
         ...
 
@@ -60,7 +65,7 @@ class RedisJobQueue:
 
     def __init__(self, redis_url: str = settings.REDIS_URL):
         self.redis_url = redis_url
-        self._client: Optional[aioredis.Redis] = None
+        self._client: aioredis.Redis | None = None
 
     def _get_client(self) -> aioredis.Redis:
         if self._client is None:
@@ -72,13 +77,13 @@ class RedisJobQueue:
             )
         return self._client
 
-    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
+    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: dict[str, Any]) -> None:
         client = self._get_client()
         serialized = json.dumps(payload)
         await client.rpush("reposcore:queue:evaluations", serialized)
         logger.info(f"Evaluation {evaluation_id} enqueued to Redis queue.")
 
-    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+    async def dequeue_evaluation(self) -> dict[str, Any] | None:
         """Claim one queued payload without exposing Redis details to workers."""
         client = self._get_client()
         serialized = await client.lpop("reposcore:queue:evaluations")
@@ -97,9 +102,11 @@ class RedisJobQueue:
         if not isinstance(payload, dict):
             logger.error("Discarding Redis evaluation payload that is not a JSON object.")
             return None
-        return cast(Dict[str, Any], payload)
+        return cast(dict[str, Any], payload)
 
-    async def publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
+    async def publish_event(
+        self, evaluation_id: uuid.UUID, event_type: str, data: dict[str, Any]
+    ) -> None:
         client = self._get_client()
         message = json.dumps({"event": event_type, "data": data})
         channel = f"reposcore:events:{evaluation_id}"
@@ -117,13 +124,15 @@ class RedisJobQueue:
         await client.set(key, "1", ex=600)  # 10 minute TTL
         logger.info(f"Cancellation requested for evaluation {evaluation_id}.")
 
-    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
+    async def send_to_dlq(
+        self, evaluation_id: uuid.UUID, payload: dict[str, Any], reason: str
+    ) -> None:
         client = self._get_client()
         dlq_entry = {
             "evaluation_id": str(evaluation_id),
             "payload": payload,
             "reason": reason,
-            "failed_at": datetime.now(timezone.utc).isoformat(),
+            "failed_at": datetime.now(UTC).isoformat(),
         }
         await client.rpush("reposcore:dlq:evaluations", json.dumps(dlq_entry))
         logger.warning(f"Evaluation {evaluation_id} moved to DLQ: {reason}")
@@ -141,25 +150,31 @@ class RedisJobQueue:
 
 
 class InMemoryJobQueue:
-    """In-memory mock queue implementation for unit tests, local isolation, and DLQ tracking."""
+    """In-memory queue implementation for standalone local testing and DLQ tracking."""
 
     def __init__(self) -> None:
-        self.queue: list[Dict[str, Any]] = []
+        self.queue: list[dict[str, Any]] = []
         self.cancelled_tokens: set[str] = set()
-        self.published_events: list[Dict[str, Any]] = []
-        self.dlq: list[Dict[str, Any]] = []
+        self.published_events: list[dict[str, Any]] = []
+        self.dlq: list[dict[str, Any]] = []
 
-    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: Dict[str, Any]) -> None:
+    async def enqueue_evaluation(self, evaluation_id: uuid.UUID, payload: dict[str, Any]) -> None:
         self.queue.append({"id": str(evaluation_id), "payload": payload})
 
-    async def dequeue_evaluation(self) -> Optional[Dict[str, Any]]:
+    async def dequeue_evaluation(self) -> dict[str, Any] | None:
         """Claim the oldest queued payload using the same FIFO semantics as Redis."""
         if not self.queue:
             return None
-        return self.queue.pop(0)["payload"]
+        item = self.queue.pop(0)
+        payload = item.get("payload")
+        return dict(payload) if isinstance(payload, dict) else None
 
-    async def publish_event(self, evaluation_id: uuid.UUID, event_type: str, data: Dict[str, Any]) -> None:
-        self.published_events.append({"evaluation_id": str(evaluation_id), "event": event_type, "data": data})
+    async def publish_event(
+        self, evaluation_id: uuid.UUID, event_type: str, data: dict[str, Any]
+    ) -> None:
+        self.published_events.append(
+            {"evaluation_id": str(evaluation_id), "event": event_type, "data": data}
+        )
 
     async def is_cancelled(self, evaluation_id: uuid.UUID) -> bool:
         return str(evaluation_id) in self.cancelled_tokens
@@ -167,20 +182,24 @@ class InMemoryJobQueue:
     async def request_cancellation(self, evaluation_id: uuid.UUID) -> None:
         self.cancelled_tokens.add(str(evaluation_id))
 
-    async def send_to_dlq(self, evaluation_id: uuid.UUID, payload: Dict[str, Any], reason: str) -> None:
-        self.dlq.append({
-            "evaluation_id": str(evaluation_id),
-            "payload": payload,
-            "reason": reason,
-            "failed_at": datetime.now(timezone.utc).isoformat(),
-        })
+    async def send_to_dlq(
+        self, evaluation_id: uuid.UUID, payload: dict[str, Any], reason: str
+    ) -> None:
+        self.dlq.append(
+            {
+                "evaluation_id": str(evaluation_id),
+                "payload": payload,
+                "reason": reason,
+                "failed_at": datetime.now(UTC).isoformat(),
+            }
+        )
 
     async def check_health(self) -> str:
         return "connected"
 
 
 # Global queue singleton
-_job_queue: Optional[IJobQueue] = None
+_job_queue: IJobQueue | None = None
 
 
 def get_job_queue() -> IJobQueue:

@@ -2,9 +2,8 @@
 Unit tests for DeterministicScoringEngine calculator, clamping, and receipts.
 """
 
-from decimal import Decimal
 import uuid
-import pytest
+from decimal import Decimal
 
 from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import EvidenceCategory, LetterGrade, SeverityLevel

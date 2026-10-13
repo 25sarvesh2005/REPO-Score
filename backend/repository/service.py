@@ -3,14 +3,11 @@ Repository Ingestion Orchestrator.
 Coordinates URL validation, hardened cloning, snapshot manifest generation, deduplication, and technology detection.
 """
 
-from datetime import datetime, timezone
 import logging
-from pathlib import Path
 import shutil
 import tempfile
 import time
-from typing import Optional
-import uuid
+from pathlib import Path
 
 from backend.core.config import settings
 from backend.repository.detector import detect_technologies_and_category
@@ -21,7 +18,6 @@ from backend.repository.ingestion import (
 from backend.repository.models import (
     IngestionFailureReason,
     IngestionResult,
-    TechnologyDetectionResult,
 )
 from backend.repository.snapshot import (
     RepositoryFileCountExceededError,
@@ -43,8 +39,8 @@ class RepositoryIngestionService:
 
     def __init__(
         self,
-        storage_root: Optional[Path] = None,
-        git_client: Optional[GitIngestionClient] = None,
+        storage_root: Path | None = None,
+        git_client: GitIngestionClient | None = None,
     ) -> None:
         self.storage_root = (storage_root or Path(settings.SNAPSHOT_STORAGE_PATH)).resolve()
         self.git_client = git_client or GitIngestionClient()
@@ -53,11 +49,11 @@ class RepositoryIngestionService:
     async def ingest_repository(
         self,
         raw_url: str,
-        ref: Optional[str] = None,
+        ref: str | None = None,
     ) -> IngestionResult:
         """
         Ingest a remote Git repository safely into an immutable local snapshot.
-        
+
         Execution steps:
         1. Validate and normalize repository reference (SSRF protection).
         2. Perform shallow clone with hooks neutralized.
@@ -68,7 +64,7 @@ class RepositoryIngestionService:
         7. Set directory permissions to read-only.
         """
         start_time = time.monotonic()
-        temp_dir: Optional[Path] = None
+        temp_dir: Path | None = None
 
         try:
             # Step 1: Validate repository URL and ref
@@ -187,7 +183,11 @@ class RepositoryIngestionService:
                 duration_ms=elapsed_ms,
             )
 
-        except (RepositorySizeExceededError, RepositoryFileCountExceededError, SnapshotSecurityError) as exc:
+        except (
+            RepositorySizeExceededError,
+            RepositoryFileCountExceededError,
+            SnapshotSecurityError,
+        ) as exc:
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             reason = (
                 IngestionFailureReason.SIZE_EXCEEDED

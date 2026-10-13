@@ -4,11 +4,11 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md Section 2.4 and ADR-009.
 Evaluates daemon boot, event loop stability, log heartbeats, and graceful SIGTERM termination in sandbox.
 """
 
-from pathlib import Path
 import re
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.builder import execute_build
@@ -38,7 +38,7 @@ class WorkerEvaluator(BaseRuntimeEvaluator):
 
     def resolve_worker_command(
         self, snapshot_path: Path, detection: TechnologyDetectionResult
-    ) -> List[str]:
+    ) -> list[str]:
         """Resolve sandboxed worker launch command."""
         primary = detection.primary_language or ""
         frameworks = detection.detected_frameworks
@@ -68,14 +68,14 @@ class WorkerEvaluator(BaseRuntimeEvaluator):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         ctx = context or {}
         evaluation_id = ctx.get("evaluation_id", str(uuid.uuid4()))
         start_time = time.monotonic()
 
-        unhandled_exceptions: List[str] = []
-        critical_logs: List[str] = []
+        unhandled_exceptions: list[str] = []
+        critical_logs: list[str] = []
 
         # Step 1: Sandboxed Build Execution
         build_result = await execute_build(sandbox, snapshot_path, detection)
@@ -105,7 +105,11 @@ class WorkerEvaluator(BaseRuntimeEvaluator):
 
         # Step 3: Analyze Stability & Heartbeat Signals
         heartbeat_detected = bool(
-            re.search(r"(ready|connected|listening|heartbeat|starting worker|consumer started)", combined_logs, re.I)
+            re.search(
+                r"(ready|connected|listening|heartbeat|starting worker|consumer started)",
+                combined_logs,
+                re.I,
+            )
         )
         if "Traceback (most recent call last)" in combined_logs:
             unhandled_exceptions.append(combined_logs[-400:])
@@ -132,7 +136,9 @@ class WorkerEvaluator(BaseRuntimeEvaluator):
             stdout=exec_result.stdout,
             stderr=exec_result.stderr,
             timed_out=exec_result.timed_out,
-            failure_message="Worker crashed unexpectedly during observation window" if crashed_early else None,
+            failure_message="Worker crashed unexpectedly during observation window"
+            if crashed_early
+            else None,
         )
 
         # Telemetry

@@ -4,11 +4,10 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md Section 2.2 and ADR-009.
 Evaluates flag resilience, --help completeness, --version adherence, and graceful error handling in sandbox.
 """
 
-from pathlib import Path
-import re
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.builder import execute_build
@@ -37,7 +36,7 @@ class CliEvaluator(BaseRuntimeEvaluator):
 
     def resolve_cli_command(
         self, snapshot_path: Path, detection: TechnologyDetectionResult
-    ) -> List[str]:
+    ) -> list[str]:
         """Resolve sandboxed CLI invocation base command."""
         primary = detection.primary_language or ""
 
@@ -74,14 +73,14 @@ class CliEvaluator(BaseRuntimeEvaluator):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         ctx = context or {}
         evaluation_id = ctx.get("evaluation_id", str(uuid.uuid4()))
         start_time = time.monotonic()
 
-        unhandled_exceptions: List[str] = []
-        critical_logs: List[str] = []
+        unhandled_exceptions: list[str] = []
+        critical_logs: list[str] = []
 
         # Step 1: Sandboxed Build Execution
         build_result = await execute_build(sandbox, snapshot_path, detection)

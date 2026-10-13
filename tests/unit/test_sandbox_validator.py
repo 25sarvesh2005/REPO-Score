@@ -2,8 +2,8 @@
 Unit tests for sandbox security invariants validation.
 """
 
-from pathlib import Path
 import pytest
+from pydantic import ValidationError
 
 from backend.sandbox.exceptions import SandboxSecurityViolationError
 from backend.sandbox.models import NetworkPolicy, SandboxConfig
@@ -70,7 +70,7 @@ def test_reject_excessive_memory(valid_config: SandboxConfig, excessive_memory: 
 
 def test_reject_excessive_cpu_quota() -> None:
     # Validates Pydantic or security invariant validator
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         SandboxConfig(
             image="test",
             cpu_quota=5.0,  # exceeds Pydantic le=4.0
@@ -79,7 +79,7 @@ def test_reject_excessive_cpu_quota() -> None:
 
 def test_reject_excessive_pids(valid_config: SandboxConfig) -> None:
     # Pydantic allows up to 256, test 260
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         SandboxConfig(
             image="test",
             pids_limit=300,
@@ -95,10 +95,10 @@ def test_reject_excessive_pids(valid_config: SandboxConfig) -> None:
         "C:/ProgramData/Docker/docker.sock",
     ],
 )
-def test_strictly_forbid_docker_socket_mount(valid_config: SandboxConfig, malicious_mount: str) -> None:
-    valid_config.bind_mounts = {
-        malicious_mount: {"bind": "/workspace/docker.sock", "mode": "ro"}
-    }
+def test_strictly_forbid_docker_socket_mount(
+    valid_config: SandboxConfig, malicious_mount: str
+) -> None:
+    valid_config.bind_mounts = {malicious_mount: {"bind": "/workspace/docker.sock", "mode": "ro"}}
     with pytest.raises(SandboxSecurityViolationError, match="Docker socket"):
         validate_sandbox_security_invariants(valid_config)
 

@@ -3,7 +3,7 @@ Integration tests for RepositoryIngestionService, snapshot deduplication, and fa
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock
+
 import pytest
 
 from backend.repository.ingestion import (

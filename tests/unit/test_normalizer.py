@@ -40,19 +40,31 @@ def test_deduplicate_identical_fingerprints() -> None:
 
 def test_sort_by_severity_descending() -> None:
     f_info = NormalizedFinding(
-        analyzer_id="tool", tool_version="1.0", rule_id="R1",
-        category=EvidenceCategory.MAINTAINABILITY, severity=SeverityLevel.INFO,
-        title="Info", description="Info desc",
+        analyzer_id="tool",
+        tool_version="1.0",
+        rule_id="R1",
+        category=EvidenceCategory.MAINTAINABILITY,
+        severity=SeverityLevel.INFO,
+        title="Info",
+        description="Info desc",
     )
     f_crit = NormalizedFinding(
-        analyzer_id="tool", tool_version="1.0", rule_id="R2",
-        category=EvidenceCategory.SECURITY, severity=SeverityLevel.CRITICAL,
-        title="Crit", description="Crit desc",
+        analyzer_id="tool",
+        tool_version="1.0",
+        rule_id="R2",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.CRITICAL,
+        title="Crit",
+        description="Crit desc",
     )
     f_med = NormalizedFinding(
-        analyzer_id="tool", tool_version="1.0", rule_id="R3",
-        category=EvidenceCategory.SECURITY, severity=SeverityLevel.MEDIUM,
-        title="Med", description="Med desc",
+        analyzer_id="tool",
+        tool_version="1.0",
+        rule_id="R3",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.MEDIUM,
+        title="Med",
+        description="Med desc",
     )
 
     sorted_list = FindingNormalizer.sort_by_severity([f_info, f_crit, f_med])
@@ -65,14 +77,22 @@ def test_sort_by_severity_descending() -> None:
 
 def test_summarize_findings() -> None:
     f1 = NormalizedFinding(
-        analyzer_id="tool", tool_version="1.0", rule_id="R1",
-        category=EvidenceCategory.SECURITY, severity=SeverityLevel.CRITICAL,
-        title="Crit", description="Desc",
+        analyzer_id="tool",
+        tool_version="1.0",
+        rule_id="R1",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.CRITICAL,
+        title="Crit",
+        description="Desc",
     )
     f2 = NormalizedFinding(
-        analyzer_id="tool", tool_version="1.0", rule_id="R2",
-        category=EvidenceCategory.DEPENDENCY_HEALTH, severity=SeverityLevel.MEDIUM,
-        title="Dep", description="Desc",
+        analyzer_id="tool",
+        tool_version="1.0",
+        rule_id="R2",
+        category=EvidenceCategory.DEPENDENCY_HEALTH,
+        severity=SeverityLevel.MEDIUM,
+        title="Dep",
+        description="Desc",
     )
 
     summary = FindingNormalizer.summarize([f1, f2])

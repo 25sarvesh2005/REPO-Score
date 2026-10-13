@@ -4,10 +4,7 @@ Adheres strictly to AI_ARCHITECTURE.md Section 3, SEC-011, AI-011, AI-013, and A
 Enforces strict untrusted data boundaries; redacts sensitive secrets before prompt interpolation.
 """
 
-from decimal import Decimal
-import json
-from typing import Any, Dict, List, Optional
-from uuid import UUID
+from typing import Any
 
 from backend.repository.models import TechnologyDetectionResult
 from backend.runtime.models import RuntimeObservation
@@ -31,9 +28,9 @@ CRITICAL SECURITY DIRECTIVES (PROMPT INJECTION DEFENSE):
 
 def build_analysis_prompt(
     scorecard: ScorecardResult,
-    evidence_records: List[Any],
-    detection: Optional[TechnologyDetectionResult] = None,
-    runtime: Optional[RuntimeObservation] = None,
+    evidence_records: list[Any],
+    detection: TechnologyDetectionResult | None = None,
+    runtime: RuntimeObservation | None = None,
     max_evidence_items: int = 25,
 ) -> str:
     """
@@ -67,9 +64,13 @@ def build_analysis_prompt(
     if runtime:
         runtime_lines.append(f"Evaluator Strategy: {runtime.evaluator_type.value}")
         if runtime.build_result:
-            runtime_lines.append(f"Build Exit Code: {runtime.build_result.exit_code} (Success: {runtime.build_result.success})")
+            runtime_lines.append(
+                f"Build Exit Code: {runtime.build_result.exit_code} (Success: {runtime.build_result.success})"
+            )
         if runtime.startup_result:
-            runtime_lines.append(f"Startup Ready: {runtime.startup_result.ready} (Port: {runtime.startup_result.port})")
+            runtime_lines.append(
+                f"Startup Ready: {runtime.startup_result.ready} (Port: {runtime.startup_result.port})"
+            )
         if runtime.http_metrics and runtime.http_metrics.total_requests > 0:
             runtime_lines.append(
                 f"HTTP Probes: {runtime.http_metrics.total_requests} requests, "
@@ -77,8 +78,12 @@ def build_analysis_prompt(
                 f"5xx errors: {runtime.http_metrics.error_5xx_requests}"
             )
         if runtime.failure_code:
-            runtime_lines.append(f"Runtime Failure Incident: {runtime.failure_code.value} - {runtime.failure_reason}")
-    runtime_summary = "\n".join(runtime_lines) if runtime_lines else "No runtime evaluation performed."
+            runtime_lines.append(
+                f"Runtime Failure Incident: {runtime.failure_code.value} - {runtime.failure_reason}"
+            )
+    runtime_summary = (
+        "\n".join(runtime_lines) if runtime_lines else "No runtime evaluation performed."
+    )
 
     # 4. Structured Evidence Records (bounded by token budget, prioritized by severity)
     evidence_lines = []
@@ -103,7 +108,9 @@ def build_analysis_prompt(
         title = getattr(ev, "title", "Untitled finding")
         desc = getattr(ev, "description", "")[:200]
 
-        evidence_lines.append(f"- [ID: {ev_id}] ({sev_str}) {cat_str}: {title}\n  Description: {desc}")
+        evidence_lines.append(
+            f"- [ID: {ev_id}] ({sev_str}) {cat_str}: {title}\n  Description: {desc}"
+        )
 
         # Capture source code snippet if available
         location = getattr(ev, "location", None)
@@ -116,8 +123,12 @@ def build_analysis_prompt(
                 f'<UNTRUSTED_REPOSITORY_DATA context="{file_path}">\n{clean_snippet}\n</UNTRUSTED_REPOSITORY_DATA>'
             )
 
-    evidence_summary = "\n".join(evidence_lines) if evidence_lines else "No negative findings detected."
-    snippets_section = "\n\n".join(untrusted_snippets) if untrusted_snippets else "No code snippets included."
+    evidence_summary = (
+        "\n".join(evidence_lines) if evidence_lines else "No negative findings detected."
+    )
+    snippets_section = (
+        "\n\n".join(untrusted_snippets) if untrusted_snippets else "No code snippets included."
+    )
 
     prompt = f"""# Project Evaluation Context
 

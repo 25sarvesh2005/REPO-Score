@@ -4,15 +4,15 @@ Adheres strictly to SCORING_ARCHITECTURE.md, ADR-004, and SCORE-005 through SCOR
 Enforces 100% evidence attribution; AI models cannot modify these rules.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, List, Optional, Tuple
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 from uuid import UUID
 
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
 from backend.scoring.models import ReceiptItem
 
 # Base severity deduction multipliers (SCORE-005)
-SEVERITY_MULTIPLIERS: Dict[SeverityLevel, Decimal] = {
+SEVERITY_MULTIPLIERS: dict[SeverityLevel, Decimal] = {
     SeverityLevel.CRITICAL: Decimal("25.0"),
     SeverityLevel.HIGH: Decimal("15.0"),
     SeverityLevel.MEDIUM: Decimal("8.0"),
@@ -42,9 +42,9 @@ class EvidenceAdapter:
             self.raw_payload = raw.get("raw_payload") or {}
         else:
             self.id = getattr(raw, "id", None)
-            cat = getattr(raw, "category")
+            cat = raw.category
             self.category = cat if isinstance(cat, EvidenceCategory) else EvidenceCategory(str(cat))
-            sev = getattr(raw, "severity")
+            sev = raw.severity
             self.severity = sev if isinstance(sev, SeverityLevel) else SeverityLevel(str(sev))
             self.confidence = float(getattr(raw, "confidence", 1.0))
             self.title = str(getattr(raw, "title", ""))
@@ -53,7 +53,7 @@ class EvidenceAdapter:
             self.raw_payload = getattr(raw, "raw_payload", {}) or {}
 
 
-def evaluate_evidence_item(evidence: EvidenceAdapter) -> Optional[ReceiptItem]:
+def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
     """
     Evaluate an atomic evidence record against domain rules, computing exact deduction/credit.
     Returns ReceiptItem or None if finding is informational or non-scoring.
@@ -84,7 +84,11 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> Optional[ReceiptItem]:
 
     # 2. SECURITY (SCORE-012)
     elif evidence.category == EvidenceCategory.SECURITY:
-        if "SEC-001" in evidence.rule_id or "SEC-002" in evidence.rule_id or "Secret" in evidence.title:
+        if (
+            "SEC-001" in evidence.rule_id
+            or "SEC-002" in evidence.rule_id
+            or "Secret" in evidence.title
+        ):
             rule_code = "RULE_SEC_HARDCODED_SECRET"
             base_points = Decimal("25.0")
         elif "DEP-CVE" in evidence.rule_id or "Vulnerability" in evidence.title:
@@ -210,6 +214,7 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> Optional[ReceiptItem]:
     ev_id = evidence.id
     if not ev_id:
         import uuid
+
         ev_id = uuid.uuid4()
 
     return ReceiptItem(

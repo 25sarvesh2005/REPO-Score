@@ -4,16 +4,17 @@ Adheres strictly to EVIDENCE_ARCHITECTURE.md, RUNTIME_ARCHITECTURE.md, and ADR-0
 """
 
 from enum import Enum
-import hashlib
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
 
-from backend.analyzers.models import FindingLocation, NormalizedFinding
+from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
 
 
 class EvaluatorType(str, Enum):
     """Categorical runtime evaluation strategy."""
+
     HTTP_API = "HTTP_API"
     CLI_TOOL = "CLI_TOOL"
     LIBRARY = "LIBRARY"
@@ -24,6 +25,7 @@ class EvaluatorType(str, Enum):
 
 class TestOrigin(str, Enum):
     """Origin and provenance classification for executed tests (EVAL-029)."""
+
     __test__ = False
     REPOSITORY_PROVIDED = "REPOSITORY_PROVIDED"
     PLATFORM_DETERMINISTIC = "PLATFORM_DETERMINISTIC"
@@ -34,6 +36,7 @@ class TestOrigin(str, Enum):
 
 class RuntimeFailureCode(str, Enum):
     """Structured failure categories for build, startup, and execution."""
+
     BUILD_FAILURE = "BUILD_FAILURE"
     STARTUP_TIMEOUT = "STARTUP_TIMEOUT"
     CRASH_ON_BOOT = "CRASH_ON_BOOT"
@@ -49,51 +52,95 @@ class RuntimeFailureCode(str, Enum):
 
 class BuildResult(BaseModel):
     """Outcome of dependency installation and compilation inside the sandbox (EVAL-021 to EVAL-024)."""
+
     success: bool = Field(..., description="Whether build completed with zero exit code")
     duration_ms: int = Field(default=0, ge=0, description="Build execution time in milliseconds")
     exit_code: int = Field(default=0, description="Process exit code")
     stdout: str = Field(default="", description="Sanitized standard output from build")
     stderr: str = Field(default="", description="Sanitized standard error from build")
-    command: List[str] = Field(default_factory=list, description="Build command executed")
+    command: list[str] = Field(default_factory=list, description="Build command executed")
     timed_out: bool = Field(default=False, description="Whether build exceeded timeout ceiling")
-    oom_killed: bool = Field(default=False, description="Whether build was terminated by OOM killer")
-    artifacts: Dict[str, Any] = Field(default_factory=dict, description="Build metadata and diagnostic markers")
+    oom_killed: bool = Field(
+        default=False, description="Whether build was terminated by OOM killer"
+    )
+    artifacts: dict[str, Any] = Field(
+        default_factory=dict, description="Build metadata and diagnostic markers"
+    )
 
 
 class StartupResult(BaseModel):
     """Outcome of application bootstrapping and readiness probing (EVAL-025 to EVAL-028)."""
+
     success: bool = Field(..., description="Whether application successfully started and responded")
-    duration_ms: int = Field(default=0, ge=0, description="Startup bootstrapping latency in milliseconds")
-    exit_code: Optional[int] = Field(default=None, description="Exit code if process terminated prematurely")
-    ready: bool = Field(default=False, description="Whether listening socket or ready endpoint was verified")
-    ready_endpoint: Optional[str] = Field(default=None, description="Discovered healthy readiness endpoint")
-    port: Optional[int] = Field(default=None, description="Detected loopback listening port")
+    duration_ms: int = Field(
+        default=0, ge=0, description="Startup bootstrapping latency in milliseconds"
+    )
+    exit_code: int | None = Field(
+        default=None, description="Exit code if process terminated prematurely"
+    )
+    ready: bool = Field(
+        default=False, description="Whether listening socket or ready endpoint was verified"
+    )
+    ready_endpoint: str | None = Field(
+        default=None, description="Discovered healthy readiness endpoint"
+    )
+    port: int | None = Field(default=None, description="Detected loopback listening port")
     stdout: str = Field(default="", description="Sanitized standard output captured during startup")
     stderr: str = Field(default="", description="Sanitized standard error captured during startup")
-    timed_out: bool = Field(default=False, description="Whether startup polling exceeded readiness timeout")
-    failure_message: Optional[str] = Field(default=None, description="Diagnostic error explanation if failed")
+    timed_out: bool = Field(
+        default=False, description="Whether startup polling exceeded readiness timeout"
+    )
+    failure_message: str | None = Field(
+        default=None, description="Diagnostic error explanation if failed"
+    )
 
 
 class ResourceMetrics(BaseModel):
     """Cgroups resource telemetry observed during sandboxed execution (EVAL-032)."""
-    cpu_peak_percent: float = Field(default=0.0, ge=0.0, description="Peak CPU utilization percentage")
-    cpu_avg_percent: float = Field(default=0.0, ge=0.0, description="Average CPU utilization percentage")
+
+    cpu_peak_percent: float = Field(
+        default=0.0, ge=0.0, description="Peak CPU utilization percentage"
+    )
+    cpu_avg_percent: float = Field(
+        default=0.0, ge=0.0, description="Average CPU utilization percentage"
+    )
     memory_peak_mb: int = Field(default=0, ge=0, description="Peak memory consumption in megabytes")
-    memory_steady_mb: int = Field(default=0, ge=0, description="Steady-state memory consumption in megabytes")
+    memory_steady_mb: int = Field(
+        default=0, ge=0, description="Steady-state memory consumption in megabytes"
+    )
     pids_peak: int = Field(default=0, ge=0, description="Peak concurrent process/thread count")
-    disk_bytes_written: int = Field(default=0, ge=0, description="Total scratchpad disk bytes written")
+    disk_bytes_written: int = Field(
+        default=0, ge=0, description="Total scratchpad disk bytes written"
+    )
 
 
 class HttpMetrics(BaseModel):
     """Synthetic HTTP load probing and latency metrics (EVAL-031)."""
-    total_requests: int = Field(default=0, ge=0, description="Total synthetic HTTP requests executed")
-    successful_requests: int = Field(default=0, ge=0, description="Total HTTP 2xx responses received")
-    error_5xx_requests: int = Field(default=0, ge=0, description="Total HTTP 5xx server error responses")
-    error_4xx_requests: int = Field(default=0, ge=0, description="Total HTTP 4xx client error responses")
-    latency_p50_ms: float = Field(default=0.0, ge=0.0, description="50th percentile response latency in ms")
-    latency_p95_ms: float = Field(default=0.0, ge=0.0, description="95th percentile response latency in ms")
-    latency_p99_ms: float = Field(default=0.0, ge=0.0, description="99th percentile response latency in ms")
-    endpoints_tested: List[str] = Field(default_factory=list, description="List of URL paths probed")
+
+    total_requests: int = Field(
+        default=0, ge=0, description="Total synthetic HTTP requests executed"
+    )
+    successful_requests: int = Field(
+        default=0, ge=0, description="Total HTTP 2xx responses received"
+    )
+    error_5xx_requests: int = Field(
+        default=0, ge=0, description="Total HTTP 5xx server error responses"
+    )
+    error_4xx_requests: int = Field(
+        default=0, ge=0, description="Total HTTP 4xx client error responses"
+    )
+    latency_p50_ms: float = Field(
+        default=0.0, ge=0.0, description="50th percentile response latency in ms"
+    )
+    latency_p95_ms: float = Field(
+        default=0.0, ge=0.0, description="95th percentile response latency in ms"
+    )
+    latency_p99_ms: float = Field(
+        default=0.0, ge=0.0, description="99th percentile response latency in ms"
+    )
+    endpoints_tested: list[str] = Field(
+        default_factory=list, description="List of URL paths probed"
+    )
 
     @property
     def error_rate(self) -> float:
@@ -105,59 +152,90 @@ class HttpMetrics(BaseModel):
 
 class TestCaseResult(BaseModel):
     """Individual test execution outcome record with provenance tracking (EVAL-029)."""
+
     __test__ = False
     name: str = Field(..., description="Identifier or name of test case")
-    origin: TestOrigin = Field(default=TestOrigin.REPOSITORY_PROVIDED, description="Provenance origin of test")
+    origin: TestOrigin = Field(
+        default=TestOrigin.REPOSITORY_PROVIDED, description="Provenance origin of test"
+    )
     passed: bool = Field(default=True, description="Whether test case passed")
     skipped: bool = Field(default=False, description="Whether test case was ignored or skipped")
     duration_ms: int = Field(default=0, ge=0, description="Execution duration in milliseconds")
-    failure_message: Optional[str] = Field(default=None, description="Assertion failure message or traceback")
-    stdout: Optional[str] = Field(default=None, description="Test-specific standard output")
+    failure_message: str | None = Field(
+        default=None, description="Assertion failure message or traceback"
+    )
+    stdout: str | None = Field(default=None, description="Test-specific standard output")
 
 
 class TestMetrics(BaseModel):
     """Aggregated test suite execution metrics (EVAL-030)."""
+
     __test__ = False
     tests_total: int = Field(default=0, ge=0, description="Total test cases executed")
     tests_passed: int = Field(default=0, ge=0, description="Total passing tests")
     tests_failed: int = Field(default=0, ge=0, description="Total failing tests")
     tests_skipped: int = Field(default=0, ge=0, description="Total skipped tests")
     duration_ms: int = Field(default=0, ge=0, description="Total test execution duration in ms")
-    line_coverage_percent: Optional[float] = Field(
+    line_coverage_percent: float | None = Field(
         default=None, ge=0.0, le=100.0, description="Line test coverage percentage"
     )
-    branch_coverage_percent: Optional[float] = Field(
+    branch_coverage_percent: float | None = Field(
         default=None, ge=0.0, le=100.0, description="Branch test coverage percentage"
     )
-    test_runner: Optional[str] = Field(default=None, description="Test runner tool executed (e.g. pytest, npm test)")
-    test_cases: List[TestCaseResult] = Field(default_factory=list, description="Granular individual test results")
+    test_runner: str | None = Field(
+        default=None, description="Test runner tool executed (e.g. pytest, npm test)"
+    )
+    test_cases: list[TestCaseResult] = Field(
+        default_factory=list, description="Granular individual test results"
+    )
 
 
 class CliMetrics(BaseModel):
     """Evaluation metrics for command-line tool resilience and conformance."""
+
     help_tested: bool = Field(default=False, description="Whether --help and -h flags were tested")
-    help_exit_code: Optional[int] = Field(default=None, description="Exit code for --help invocation")
-    help_output_length: int = Field(default=0, ge=0, description="Character count of returned help documentation")
+    help_exit_code: int | None = Field(default=None, description="Exit code for --help invocation")
+    help_output_length: int = Field(
+        default=0, ge=0, description="Character count of returned help documentation"
+    )
     version_tested: bool = Field(default=False, description="Whether --version flag was tested")
-    version_exit_code: Optional[int] = Field(default=None, description="Exit code for --version invocation")
-    version_output: Optional[str] = Field(default=None, description="Captured version string")
-    invalid_args_tested: bool = Field(default=False, description="Whether invalid argument resilience was tested")
-    invalid_args_exit_code: Optional[int] = Field(
+    version_exit_code: int | None = Field(
+        default=None, description="Exit code for --version invocation"
+    )
+    version_output: str | None = Field(default=None, description="Captured version string")
+    invalid_args_tested: bool = Field(
+        default=False, description="Whether invalid argument resilience was tested"
+    )
+    invalid_args_exit_code: int | None = Field(
         default=None, description="Exit code on invalid arguments (expected non-zero)"
     )
     invalid_args_clean_error: bool = Field(
-        default=False, description="True if invalid arguments produced clean error without unhandled traceback"
+        default=False,
+        description="True if invalid arguments produced clean error without unhandled traceback",
     )
-    json_output_supported: bool = Field(default=False, description="True if --json produces valid JSON")
+    json_output_supported: bool = Field(
+        default=False, description="True if --json produces valid JSON"
+    )
 
 
 class WorkerMetrics(BaseModel):
     """Evaluation metrics for daemon and background queue worker processes."""
-    stable_running_duration_ms: int = Field(default=0, ge=0, description="Stable execution window in milliseconds")
-    heartbeat_detected: bool = Field(default=False, description="Whether periodic readiness logs were detected")
-    clean_sigterm_exit: bool = Field(default=False, description="Whether worker exited cleanly on SIGTERM within 5s")
-    termination_duration_ms: int = Field(default=0, ge=0, description="Time taken to terminate upon receiving SIGTERM")
-    unhandled_exceptions_count: int = Field(default=0, ge=0, description="Count of caught traceback logs")
+
+    stable_running_duration_ms: int = Field(
+        default=0, ge=0, description="Stable execution window in milliseconds"
+    )
+    heartbeat_detected: bool = Field(
+        default=False, description="Whether periodic readiness logs were detected"
+    )
+    clean_sigterm_exit: bool = Field(
+        default=False, description="Whether worker exited cleanly on SIGTERM within 5s"
+    )
+    termination_duration_ms: int = Field(
+        default=0, ge=0, description="Time taken to terminate upon receiving SIGTERM"
+    )
+    unhandled_exceptions_count: int = Field(
+        default=0, ge=0, description="Count of caught traceback logs"
+    )
 
 
 class RuntimeObservation(BaseModel):
@@ -165,37 +243,54 @@ class RuntimeObservation(BaseModel):
     Complete empirical runtime observation record produced by sandboxed execution.
     Converts directly into verifiable, immutable EvidenceRecords for downstream scoring.
     """
+
     evaluation_id: str = Field(..., description="Evaluation job UUID")
     evaluator_type: EvaluatorType = Field(..., description="Operational evaluator strategy used")
-    primary_language: Optional[str] = Field(default=None, description="Detected repository language")
-    build_result: Optional[BuildResult] = Field(default=None, description="Build step results")
-    startup_result: Optional[StartupResult] = Field(default=None, description="Startup and readiness results")
-    resource_metrics: Optional[ResourceMetrics] = Field(default=None, description="Observed cgroups telemetry")
-    http_metrics: Optional[HttpMetrics] = Field(default=None, description="HTTP synthetic probing metrics")
-    cli_metrics: Optional[CliMetrics] = Field(default=None, description="CLI invocation metrics")
-    worker_metrics: Optional[WorkerMetrics] = Field(default=None, description="Worker daemon metrics")
-    test_metrics: Optional[TestMetrics] = Field(default=None, description="Native test suite metrics")
-    exit_code: Optional[int] = Field(default=None, description="Primary process terminal exit code")
-    duration_ms: int = Field(default=0, ge=0, description="Total runtime evaluation duration in milliseconds")
-    failure_code: Optional[RuntimeFailureCode] = Field(
+    primary_language: str | None = Field(default=None, description="Detected repository language")
+    build_result: BuildResult | None = Field(default=None, description="Build step results")
+    startup_result: StartupResult | None = Field(
+        default=None, description="Startup and readiness results"
+    )
+    resource_metrics: ResourceMetrics | None = Field(
+        default=None, description="Observed cgroups telemetry"
+    )
+    http_metrics: HttpMetrics | None = Field(
+        default=None, description="HTTP synthetic probing metrics"
+    )
+    cli_metrics: CliMetrics | None = Field(default=None, description="CLI invocation metrics")
+    worker_metrics: WorkerMetrics | None = Field(default=None, description="Worker daemon metrics")
+    test_metrics: TestMetrics | None = Field(default=None, description="Native test suite metrics")
+    exit_code: int | None = Field(default=None, description="Primary process terminal exit code")
+    duration_ms: int = Field(
+        default=0, ge=0, description="Total runtime evaluation duration in milliseconds"
+    )
+    failure_code: RuntimeFailureCode | None = Field(
         default=None, description="Structured failure category if execution was unsuccessful"
     )
-    failure_reason: Optional[str] = Field(default=None, description="Human-readable failure diagnostic message")
-    unhandled_exceptions: List[str] = Field(default_factory=list, description="Captured tracebacks and unhandled panics")
-    critical_logs: List[str] = Field(default_factory=list, description="Notable diagnostic or error log lines")
+    failure_reason: str | None = Field(
+        default=None, description="Human-readable failure diagnostic message"
+    )
+    unhandled_exceptions: list[str] = Field(
+        default_factory=list, description="Captured tracebacks and unhandled panics"
+    )
+    critical_logs: list[str] = Field(
+        default_factory=list, description="Notable diagnostic or error log lines"
+    )
     raw_stdout: str = Field(default="", description="Sanitized and bounded overall standard output")
     raw_stderr: str = Field(default="", description="Sanitized and bounded overall standard error")
 
-    def to_evidence_items(self) -> List[NormalizedFinding]:
+    def to_evidence_items(self) -> list[NormalizedFinding]:
         """
         Convert empirical runtime observations into canonical normalized findings
         traceable to specific score dimensions (CORRECTNESS, RELIABILITY, PERFORMANCE, TESTING).
         """
-        findings: List[NormalizedFinding] = []
+        findings: list[NormalizedFinding] = []
 
         # 1. Build Failure Evidence
         if self.build_result and not self.build_result.success:
-            err_snippet = (self.build_result.stderr or self.build_result.stdout or "Build failed")[:300]
+            err_snippet = (self.build_result.stderr or self.build_result.stdout or "Build failed")[
+                :300
+            ]
             findings.append(
                 NormalizedFinding(
                     analyzer_id="runtime-engine",
@@ -218,7 +313,11 @@ class RuntimeObservation(BaseModel):
 
         # 2. Startup Failure / Crash on Boot
         if self.startup_result and not self.startup_result.success:
-            severity = SeverityLevel.CRITICAL if self.failure_code == RuntimeFailureCode.CRASH_ON_BOOT else SeverityLevel.HIGH
+            severity = (
+                SeverityLevel.CRITICAL
+                if self.failure_code == RuntimeFailureCode.CRASH_ON_BOOT
+                else SeverityLevel.HIGH
+            )
             findings.append(
                 NormalizedFinding(
                     analyzer_id="runtime-engine",

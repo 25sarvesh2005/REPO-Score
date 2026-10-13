@@ -3,7 +3,7 @@ Unit tests for repository snapshot creation, integrity hashing, quotas, and secu
 """
 
 from pathlib import Path
-import tempfile
+
 import pytest
 
 from backend.repository.models import FileManifestEntry
@@ -14,7 +14,6 @@ from backend.repository.snapshot import (
     compute_deterministic_tree_hash,
     compute_file_sha256,
     make_directory_read_only,
-    make_directory_writable,
     safe_remove_directory,
 )
 

@@ -4,15 +4,16 @@ Alembic migration environment configured for asyncpg and SQLAlchemy 2.0.
 
 import asyncio
 from logging.config import fileConfig
+
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from backend.core.config import settings
-from backend.database.base import Base
 # Import models so Base.metadata knows about all 15 tables
 import backend.database.models  # noqa: F401
+from backend.core.config import settings
+from backend.database.base import Base
 
 config = context.config
 

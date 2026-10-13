@@ -4,11 +4,11 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md Section 2.3, EVAL-029, EVAL-030, and
 Executes native test suites within network-isolated sandboxes and parses standardized test metrics.
 """
 
-from pathlib import Path
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.builder import execute_build
@@ -25,13 +25,15 @@ from backend.runtime.models import (
 from backend.sandbox.interface import ISandbox
 
 
-def parse_pytest_output(output: str) -> Tuple[int, int, int, int, List[TestCaseResult], Optional[float]]:
+def parse_pytest_output(
+    output: str,
+) -> tuple[int, int, int, int, list[TestCaseResult], float | None]:
     """Parse pytest verbose output for counts, test cases, and coverage."""
     passed = 0
     failed = 0
     skipped = 0
-    test_cases: List[TestCaseResult] = []
-    coverage: Optional[float] = None
+    test_cases: list[TestCaseResult] = []
+    coverage: float | None = None
 
     # Line-by-line test case status
     for line in output.splitlines():
@@ -39,13 +41,26 @@ def parse_pytest_output(output: str) -> Tuple[int, int, int, int, List[TestCaseR
         # Look for e.g. "tests/test_x.py::test_y PASSED"
         if " PASSED" in line_clean or "::" in line_clean and "PASSED" in line_clean:
             name = line_clean.split(" PASSED")[0].strip()
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True))
+            test_cases.append(
+                TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True)
+            )
         elif " FAILED" in line_clean or "::" in line_clean and "FAILED" in line_clean:
             name = line_clean.split(" FAILED")[0].strip()
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=False, failure_message="Assertion failed"))
+            test_cases.append(
+                TestCaseResult(
+                    name=name,
+                    origin=TestOrigin.REPOSITORY_PROVIDED,
+                    passed=False,
+                    failure_message="Assertion failed",
+                )
+            )
         elif " SKIPPED" in line_clean or "::" in line_clean and "SKIPPED" in line_clean:
             name = line_clean.split(" SKIPPED")[0].strip()
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True, skipped=True))
+            test_cases.append(
+                TestCaseResult(
+                    name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True, skipped=True
+                )
+            )
 
     # Summary regex (e.g. "= 12 passed, 2 failed, 1 skipped in 1.45s =")
     summary_match = re.search(r"=+\s*(.*?)\s+in\s+[\d\.]+s\s*=+", output)
@@ -74,13 +89,13 @@ def parse_pytest_output(output: str) -> Tuple[int, int, int, int, List[TestCaseR
     return total, passed, failed, skipped, test_cases, coverage
 
 
-def parse_jest_output(output: str) -> Tuple[int, int, int, int, List[TestCaseResult], Optional[float]]:
+def parse_jest_output(output: str) -> tuple[int, int, int, int, list[TestCaseResult], float | None]:
     """Parse Jest / Vitest test output."""
     passed = 0
     failed = 0
     skipped = 0
-    test_cases: List[TestCaseResult] = []
-    coverage: Optional[float] = None
+    test_cases: list[TestCaseResult] = []
+    coverage: float | None = None
 
     # Regex: "Tests:       2 failed, 1 skipped, 12 passed, 15 total"
     m = re.search(r"Tests:\s*(.*)", output)
@@ -100,13 +115,17 @@ def parse_jest_output(output: str) -> Tuple[int, int, int, int, List[TestCaseRes
     return total, passed, failed, skipped, test_cases, coverage
 
 
-def parse_cargo_output(output: str) -> Tuple[int, int, int, int, List[TestCaseResult], Optional[float]]:
+def parse_cargo_output(
+    output: str,
+) -> tuple[int, int, int, int, list[TestCaseResult], float | None]:
     """Parse Cargo test runner output."""
     passed = 0
     failed = 0
     skipped = 0
     # "test result: ok. 12 passed; 0 failed; 1 ignored;"
-    m = re.search(r"test result:\s+\w+\.\s+(\d+)\s+passed;\s+(\d+)\s+failed;\s+(\d+)\s+ignored", output)
+    m = re.search(
+        r"test result:\s+\w+\.\s+(\d+)\s+passed;\s+(\d+)\s+failed;\s+(\d+)\s+ignored", output
+    )
     if m:
         passed = int(m.group(1))
         failed = int(m.group(2))
@@ -116,25 +135,33 @@ def parse_cargo_output(output: str) -> Tuple[int, int, int, int, List[TestCaseRe
     return total, passed, failed, skipped, [], None
 
 
-def parse_go_output(output: str) -> Tuple[int, int, int, int, List[TestCaseResult], Optional[float]]:
+def parse_go_output(output: str) -> tuple[int, int, int, int, list[TestCaseResult], float | None]:
     """Parse Go test runner output."""
     passed = 0
     failed = 0
     skipped = 0
-    test_cases: List[TestCaseResult] = []
+    test_cases: list[TestCaseResult] = []
 
     for line in output.splitlines():
         if line.startswith("--- PASS:"):
             name = line.split()[2]
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True))
+            test_cases.append(
+                TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True)
+            )
             passed += 1
         elif line.startswith("--- FAIL:"):
             name = line.split()[2]
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=False))
+            test_cases.append(
+                TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=False)
+            )
             failed += 1
         elif line.startswith("--- SKIP:"):
             name = line.split()[2]
-            test_cases.append(TestCaseResult(name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True, skipped=True))
+            test_cases.append(
+                TestCaseResult(
+                    name=name, origin=TestOrigin.REPOSITORY_PROVIDED, passed=True, skipped=True
+                )
+            )
             skipped += 1
 
     total = passed + failed + skipped
@@ -152,21 +179,24 @@ class LibraryEvaluator(BaseRuntimeEvaluator):
         return EvaluatorType.LIBRARY
 
     def can_evaluate(self, detection: TechnologyDetectionResult) -> bool:
-        return (
-            detection.evaluator_category == EvaluatorCategory.LIBRARY
-            or bool(detection.detected_test_runners)
+        return detection.evaluator_category == EvaluatorCategory.LIBRARY or bool(
+            detection.detected_test_runners
         )
 
     def resolve_test_command(
         self, snapshot_path: Path, detection: TechnologyDetectionResult
-    ) -> Tuple[Optional[List[str]], str]:
+    ) -> tuple[list[str] | None, str]:
         """Resolve sandboxed test execution command and test runner identifier."""
         primary = detection.primary_language or ""
         runners = detection.detected_test_runners
 
         # Python
         if primary == "Python" or "Python" in detection.detected_languages:
-            if "pytest" in runners or (snapshot_path / "tests").exists() or (snapshot_path / "test").exists():
+            if (
+                "pytest" in runners
+                or (snapshot_path / "tests").exists()
+                or (snapshot_path / "test").exists()
+            ):
                 return ["python", "-m", "pytest", "-v", "--tb=short"], "pytest"
             return ["python", "-m", "unittest", "discover"], "unittest"
 
@@ -196,14 +226,14 @@ class LibraryEvaluator(BaseRuntimeEvaluator):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         ctx = context or {}
         evaluation_id = ctx.get("evaluation_id", str(uuid.uuid4()))
         start_time = time.monotonic()
 
-        unhandled_exceptions: List[str] = []
-        critical_logs: List[str] = []
+        unhandled_exceptions: list[str] = []
+        critical_logs: list[str] = []
 
         # Step 1: Sandboxed Build / Dependency Resolution
         build_result = await execute_build(sandbox, snapshot_path, detection)
@@ -242,15 +272,19 @@ class LibraryEvaluator(BaseRuntimeEvaluator):
 
         # Step 3: Parse Test Metrics
         total, passed, failed, skipped = 0, 0, 0, 0
-        test_cases: List[TestCaseResult] = []
-        cov_pct: Optional[float] = None
+        test_cases: list[TestCaseResult] = []
+        cov_pct: float | None = None
 
         if "pytest" in runner_name:
-            total, passed, failed, skipped, test_cases, cov_pct = parse_pytest_output(combined_output)
+            total, passed, failed, skipped, test_cases, cov_pct = parse_pytest_output(
+                combined_output
+            )
         elif "npm" in runner_name:
             total, passed, failed, skipped, test_cases, cov_pct = parse_jest_output(combined_output)
         elif "cargo" in runner_name:
-            total, passed, failed, skipped, test_cases, cov_pct = parse_cargo_output(combined_output)
+            total, passed, failed, skipped, test_cases, cov_pct = parse_cargo_output(
+                combined_output
+            )
         elif "go" in runner_name:
             total, passed, failed, skipped, test_cases, cov_pct = parse_go_output(combined_output)
 
@@ -259,7 +293,11 @@ class LibraryEvaluator(BaseRuntimeEvaluator):
             if test_exec.exit_code == 0:
                 total = 1
                 passed = 1
-                test_cases.append(TestCaseResult(name="suite_execution", origin=TestOrigin.REPOSITORY_PROVIDED, passed=True))
+                test_cases.append(
+                    TestCaseResult(
+                        name="suite_execution", origin=TestOrigin.REPOSITORY_PROVIDED, passed=True
+                    )
+                )
             else:
                 total = 1
                 failed = 1

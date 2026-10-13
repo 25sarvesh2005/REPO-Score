@@ -2,20 +2,15 @@
 Unit tests for runtime domain models, metrics, and evidence derivation.
 """
 
-import pytest
-
-from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
 from backend.runtime.models import (
     BuildResult,
     CliMetrics,
     EvaluatorType,
     HttpMetrics,
-    ResourceMetrics,
     RuntimeFailureCode,
     RuntimeObservation,
     StartupResult,
-    TestCaseResult,
     TestMetrics,
     TestOrigin,
     WorkerMetrics,

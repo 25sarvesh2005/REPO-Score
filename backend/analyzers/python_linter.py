@@ -6,7 +6,7 @@ Statically analyzes AST nodes for unsafe functions, injection vulnerabilities, a
 import ast
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.analyzers.interface import BaseAnalyzer
 from backend.analyzers.models import (
@@ -23,10 +23,10 @@ class PythonSecurityVisitor(ast.NodeVisitor):
     AST visitor inspecting call sites and nodes for security vulnerabilities.
     """
 
-    def __init__(self, rel_path: str, lines: List[str]) -> None:
+    def __init__(self, rel_path: str, lines: list[str]) -> None:
         self.rel_path = rel_path
         self.lines = lines
-        self.findings: List[Dict[str, Any]] = []
+        self.findings: list[dict[str, Any]] = []
 
     def _get_snippet(self, lineno: int) -> str:
         if 1 <= lineno <= len(self.lines):
@@ -53,9 +53,18 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             )
 
         # 2. subprocess with shell=True
-        if isinstance(node.func, ast.Attribute) and node.func.attr in {"call", "run", "Popen", "check_output"}:
+        if isinstance(node.func, ast.Attribute) and node.func.attr in {
+            "call",
+            "run",
+            "Popen",
+            "check_output",
+        }:
             for kw in node.keywords:
-                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                if (
+                    kw.arg == "shell"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                ):
                     self.findings.append(
                         {
                             "rule_id": "PY-SEC-SHELL-TRUE",
@@ -106,7 +115,11 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                 # Check if usedforsecurity=False is set
                 is_safe = False
                 for kw in node.keywords:
-                    if kw.arg == "usedforsecurity" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+                    if (
+                        kw.arg == "usedforsecurity"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value is False
+                    ):
                         is_safe = True
                 if not is_safe:
                     self.findings.append(
@@ -115,7 +128,7 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                             "cwe_id": "CWE-327",
                             "severity": SeverityLevel.LOW,
                             "title": f"Use of weak hash algorithm 'hashlib.{node.func.attr}()'",
-                            "description": f"MD5 and SHA-1 are cryptographically broken and vulnerable to collision attacks.",
+                            "description": "MD5 and SHA-1 are cryptographically broken and vulnerable to collision attacks.",
                             "recommendation": "Use SHA-256 ('hashlib.sha256()') or pass usedforsecurity=False if purely for non-cryptographic checksumming.",
                             "lineno": lineno,
                             "snippet": snippet,
@@ -141,7 +154,7 @@ class PythonSecurityLinterAnalyzer(BaseAnalyzer):
             description="Detects command injections, eval usage, insecure deserialization, and weak cryptography.",
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         langs = tech_stack.get("detected_languages", {})
         primary = tech_stack.get("primary_language", "")
         return primary == "Python" or "Python" in langs
@@ -149,13 +162,17 @@ class PythonSecurityLinterAnalyzer(BaseAnalyzer):
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
-        findings: List[NormalizedFinding] = []
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
+        findings: list[NormalizedFinding] = []
         resolved_root = snapshot_path.resolve()
 
         for root, dirs, files in os.walk(resolved_root):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}
+            ]
 
             for filename in files:
                 if not filename.endswith(".py"):

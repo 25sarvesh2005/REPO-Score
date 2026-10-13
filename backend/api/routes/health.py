@@ -3,7 +3,6 @@ Operational health and readiness check route handlers.
 """
 
 from fastapi import APIRouter, Response, status
-from fastapi.responses import JSONResponse
 
 from backend.api.errors import ServiceUnavailableException
 from backend.api.schemas.contracts import HealthResponse, ReadinessResponse

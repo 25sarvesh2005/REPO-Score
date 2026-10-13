@@ -1,15 +1,15 @@
 # AGENTS.md — Agent Governance & Architectural Directives
 
 > **Project:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
-> **Authority:** System Architecture Contract (`phases/00_ARCHITECTURE.md`)  
+> **Authority:** System Architecture Contract ([`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md))  
 > **Target Audience:** All AI Coding Agents, Autonomous Subagents, and Human Collaborators
 
 ---
 
 ## 1. Prime Directives
 
-1. **Strict Phase Adherence:** You must never skip phases or write production code during architecture/design phases. Each phase has an explicit scope, acceptance criteria, and git commit gate.
-2. **Evidence Over Assumption:** RepoScore evaluates software based on runtime behavior and empirical evidence, not purely static appearance or superficial heuristics. Never fabricate results or evidence.
+1. **Engineering Rigor & Verification:** All system changes must be backed by empirical verification. Never commit mock doubles, hardcoded stubs, or synthetic placeholders to production services. Test suites must utilize idiomatic pytest fixtures and standard mocks only where external isolation is mandatory.
+2. **Evidence Over Assumption:** RepoScore evaluates software based on runtime behavior and empirical evidence, not purely static appearance or superficial heuristics. Never fabricate results, telemetry, or security claims.
 3. **Deterministic Core:** Calculations, scoring models, vulnerability mappings, static metrics, and test evaluations must be deterministic, reproducible, and verifiable.
 4. **Hostile Code Model:** Every repository submitted for analysis is treated as untrusted and potentially adversarial. Repository content must NEVER be executed directly on the host machine.
 5. **AI Role Boundary:** AI models provide reasoning, correlation, explanation, and scenario generation. AI models do NOT calculate core scores, do NOT override empirical test evidence, and do NOT execute unrestricted host commands.
@@ -17,18 +17,13 @@
 
 ---
 
-## 2. Phase Execution Protocol
+## 2. Engineering Governance Protocol
 
-Before executing work in any phase:
-1. Read the corresponding phase specification in `phases/` (or `plan/`).
-2. Verify all prerequisite phases are marked **PASS** in `docs/phase-reports/`.
-3. Check all ADRs in `docs/architecture/adrs/` for binding design decisions.
-4. Maintain architectural integrity — any deviation requires an approved Architecture Decision Record (ADR).
-5. At phase completion:
-   - Perform an adversarial self-review.
-   - Verify every item on the Phase Acceptance Checklist.
-   - Produce a signed-off Phase Report in `docs/phase-reports/PHASE_XX.md`.
-   - Execute the Git commit gate with the specified commit message.
+Before executing development or architectural work:
+1. Review relevant specifications in [`docs/architecture/`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/), [`docs/security/`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/security/), and [`docs/api/`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/api/).
+2. Consult binding decisions in [`docs/architecture/adrs/`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/adrs/). Any architectural deviation requires an approved Architecture Decision Record (ADR).
+3. Validate code changes against the automated test suite across unit, integration, and adversarial suites (`pytest tests/`).
+4. Ensure all newly introduced endpoints conform to versioned Pydantic schemas and all database alterations include forward and rollback migrations.
 
 ---
 
@@ -43,7 +38,6 @@ Before executing work in any phase:
 
 ## 4. Architectural Documents Index
 
-- [`00_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/phases/00_ARCHITECTURE.md)
 - [`SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md)
 - [`COMPONENT_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/COMPONENT_ARCHITECTURE.md)
 - [`DATA_FLOW.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/DATA_FLOW.md)

@@ -3,6 +3,7 @@ Unit tests for Python security AST linter adapter.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.analyzers.python_linter import PythonSecurityLinterAnalyzer
@@ -15,7 +16,9 @@ def py_linter() -> PythonSecurityLinterAnalyzer:
 
 
 @pytest.mark.asyncio
-async def test_detect_python_security_anti_patterns(tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer) -> None:
+async def test_detect_python_security_anti_patterns(
+    tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     code = """
@@ -50,7 +53,9 @@ def run_user_cmd(cmd):
 
 
 @pytest.mark.asyncio
-async def test_tests_directory_skipped(tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer) -> None:
+async def test_tests_directory_skipped(
+    tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     tests_dir = repo / "tests"
@@ -64,7 +69,9 @@ async def test_tests_directory_skipped(tmp_path: Path, py_linter: PythonSecurity
 
 
 @pytest.mark.asyncio
-async def test_clean_python_code_zero_linter_findings(tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer) -> None:
+async def test_clean_python_code_zero_linter_findings(
+    tmp_path: Path, py_linter: PythonSecurityLinterAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     code = """

@@ -3,13 +3,15 @@ Integration tests for the RuntimeDispatcher and isolated execution engine.
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock
+
 import pytest
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.dispatcher import RuntimeDispatcher
 from backend.runtime.models import EvaluatorType, RuntimeFailureCode
-from backend.sandbox.mock import MockSandboxManager
-from backend.sandbox.models import NetworkPolicy
+from backend.sandbox.interface import ISandbox, ISandboxManager
+from backend.sandbox.models import NetworkPolicy, SandboxExecutionResult, SandboxState
 
 
 def test_dispatcher_resolves_evaluators():
@@ -69,7 +71,23 @@ async def test_dispatcher_executes_evaluation_end_to_end(tmp_path: Path):
         evaluator_category=EvaluatorCategory.CLI_TOOL,
     )
 
-    mgr = MockSandboxManager(available=True)
+    sbx = AsyncMock(spec=ISandbox)
+    sbx.state = SandboxState.RUNNING
+    sbx.execute = AsyncMock(
+        return_value=SandboxExecutionResult(
+            exit_code=0, stdout="build ok\nmytool version 1.0", stderr=""
+        )
+    )
+    sbx.get_stats = AsyncMock(return_value={"memory_usage": 1024, "memory_limit": 2048})
+
+    async def _term():
+        sbx.state = SandboxState.TERMINATED
+
+    sbx.terminate = AsyncMock(side_effect=_term)
+
+    mgr = AsyncMock(spec=ISandboxManager)
+    mgr.is_available = AsyncMock(return_value=True)
+    mgr.create_sandbox = AsyncMock(return_value=sbx)
     disp = RuntimeDispatcher()
 
     obs = await disp.execute_evaluation(
@@ -83,10 +101,7 @@ async def test_dispatcher_executes_evaluation_end_to_end(tmp_path: Path):
     assert obs.evaluator_type == EvaluatorType.CLI_TOOL
     assert obs.cli_metrics is not None
     assert obs.resource_metrics is not None
-
-    # Verify sandbox was cleanly terminated (zero residual active containers)
-    for sbx in mgr._active_sandboxes.values():
-        assert sbx.state.value == "TERMINATED"
+    assert sbx.state == SandboxState.TERMINATED
 
 
 @pytest.mark.asyncio
@@ -95,7 +110,8 @@ async def test_dispatcher_refuses_execution_when_sandbox_unavailable(tmp_path: P
         primary_language="Python",
         evaluator_category=EvaluatorCategory.WEB_API,
     )
-    mgr = MockSandboxManager(available=False)
+    mgr = AsyncMock(spec=ISandboxManager)
+    mgr.is_available = AsyncMock(return_value=False)
     disp = RuntimeDispatcher()
 
     obs = await disp.execute_evaluation(
@@ -115,7 +131,17 @@ async def test_dispatcher_handles_unsupported_archetype(tmp_path: Path):
         primary_language=None,
         evaluator_category=EvaluatorCategory.UNSUPPORTED,
     )
-    mgr = MockSandboxManager(available=True)
+    sbx = AsyncMock(spec=ISandbox)
+    sbx.state = SandboxState.RUNNING
+    sbx.execute = AsyncMock(
+        return_value=SandboxExecutionResult(exit_code=0, stdout="noop", stderr="")
+    )
+    sbx.get_stats = AsyncMock(return_value={"memory_usage": 1024, "memory_limit": 2048})
+    sbx.terminate = AsyncMock()
+
+    mgr = AsyncMock(spec=ISandboxManager)
+    mgr.is_available = AsyncMock(return_value=True)
+    mgr.create_sandbox = AsyncMock(return_value=sbx)
     disp = RuntimeDispatcher()
 
     obs = await disp.execute_evaluation(

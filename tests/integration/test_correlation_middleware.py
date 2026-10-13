@@ -3,7 +3,9 @@ Integration tests for correlation ID propagation and header handling.
 """
 
 import uuid
+
 from fastapi.testclient import TestClient
+
 from backend.api.app import create_app
 
 client = TestClient(create_app())

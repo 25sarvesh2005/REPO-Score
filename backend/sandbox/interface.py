@@ -3,7 +3,7 @@ Abstract interface contracts for container sandbox lifecycle and execution manag
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.sandbox.models import SandboxConfig, SandboxExecutionResult, SandboxState
 
@@ -26,8 +26,8 @@ class ISandbox(ABC):
     @abstractmethod
     async def execute(
         self,
-        command: List[str],
-        timeout_seconds: Optional[int] = None,
+        command: list[str],
+        timeout_seconds: int | None = None,
     ) -> SandboxExecutionResult:
         """
         Execute a command inside the isolated container and stream/collect results.
@@ -40,7 +40,7 @@ class ISandbox(ABC):
         pass
 
     @abstractmethod
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Query cgroups resource metrics (CPU usage, memory usage, PID count)."""
         pass
 

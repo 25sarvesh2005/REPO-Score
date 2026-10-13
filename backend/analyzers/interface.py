@@ -2,11 +2,11 @@
 Abstract interface contract for pluggable static analyzer adapters.
 """
 
-from abc import ABC, abstractmethod
 import asyncio
-from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any
 
 from backend.analyzers.models import (
     AnalyzerExecutionResult,
@@ -18,7 +18,7 @@ from backend.analyzers.models import (
 class BaseAnalyzer(ABC):
     """
     Abstract contract for all static analyzer tool adapters.
-    
+
     Invariants:
     1. Adapters must never execute untrusted scripts or build hooks.
     2. Snapshots must be accessed strictly in read-only mode.
@@ -37,7 +37,7 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         """
         Determine whether this adapter is applicable given the repository's detected technology stack.
         """
@@ -47,8 +47,8 @@ class BaseAnalyzer(ABC):
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
         """
         Internal execution logic to be implemented by specific tool adapters.
         """
@@ -57,7 +57,7 @@ class BaseAnalyzer(ABC):
     async def analyze(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> AnalyzerExecutionResult:
         """
         Safe execution template wrapping tool execution with timeout, error handling,
@@ -80,7 +80,7 @@ class BaseAnalyzer(ABC):
                 duration_ms=elapsed_ms,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             return AnalyzerExecutionResult(
                 analyzer_id=meta.analyzer_id,

@@ -3,8 +3,6 @@ Unit tests for deterministic scoring rules evaluation and confidence weighting.
 """
 
 from decimal import Decimal
-import uuid
-import pytest
 
 from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel

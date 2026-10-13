@@ -5,7 +5,7 @@ All recording calls are non-blocking and fault-tolerant to ensure telemetry fail
 """
 
 import logging
-from typing import Optional
+
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -88,12 +88,15 @@ API_REQUEST_DURATION_SECONDS = Histogram(
 # (Wrapped with try/except to guarantee telemetry never corrupts evaluations)
 # =========================================================================
 
+
 def record_evaluation_metric(status: str, duration_seconds: float) -> None:
     """Record evaluation outcome and duration."""
     try:
         norm_status = status.lower()
         EVALUATIONS_TOTAL.labels(status=norm_status).inc()
-        EVALUATION_DURATION_SECONDS.labels(status=norm_status).observe(max(0.0, float(duration_seconds)))
+        EVALUATION_DURATION_SECONDS.labels(status=norm_status).observe(
+            max(0.0, float(duration_seconds))
+        )
     except Exception as exc:
         logger.warning(f"Telemetry warning: failed to record evaluation metric: {exc}")
 
@@ -102,7 +105,9 @@ def record_step_metric(step_name: str, status: str, duration_seconds: float) -> 
     """Record individual step execution latency and status."""
     try:
         norm_status = status.lower()
-        STEP_DURATION_SECONDS.labels(step_name=step_name, status=norm_status).observe(max(0.0, float(duration_seconds)))
+        STEP_DURATION_SECONDS.labels(step_name=step_name, status=norm_status).observe(
+            max(0.0, float(duration_seconds))
+        )
     except Exception as exc:
         logger.warning(f"Telemetry warning: failed to record step metric: {exc}")
 
@@ -110,7 +115,9 @@ def record_step_metric(step_name: str, status: str, duration_seconds: float) -> 
 def record_ai_inference_metric(provider: str, model: str, duration_seconds: float) -> None:
     """Record AI qualitative inference latency."""
     try:
-        AI_INFERENCE_DURATION_SECONDS.labels(provider=provider, model=model).observe(max(0.0, float(duration_seconds)))
+        AI_INFERENCE_DURATION_SECONDS.labels(provider=provider, model=model).observe(
+            max(0.0, float(duration_seconds))
+        )
     except Exception as exc:
         logger.warning(f"Telemetry warning: failed to record AI inference metric: {exc}")
 
@@ -118,18 +125,26 @@ def record_ai_inference_metric(provider: str, model: str, duration_seconds: floa
 def record_finding_metric(severity: str, category: str) -> None:
     """Record finding discovery by severity and category."""
     try:
-        SECURITY_FINDINGS_TOTAL.labels(severity=str(severity).upper(), category=str(category).upper()).inc()
+        SECURITY_FINDINGS_TOTAL.labels(
+            severity=str(severity).upper(), category=str(category).upper()
+        ).inc()
     except Exception as exc:
         logger.warning(f"Telemetry warning: failed to record finding metric: {exc}")
 
 
-def record_api_metric(method: str, endpoint: str, status_code: int, duration_seconds: float) -> None:
+def record_api_metric(
+    method: str, endpoint: str, status_code: int, duration_seconds: float
+) -> None:
     """Record API HTTP request count and latency."""
     try:
         # Normalize endpoint (strip dynamic UUIDs or IDs to prevent label explosion)
         norm_endpoint = endpoint
-        API_REQUESTS_TOTAL.labels(method=method.upper(), endpoint=norm_endpoint, status_code=str(status_code)).inc()
-        API_REQUEST_DURATION_SECONDS.labels(method=method.upper(), endpoint=norm_endpoint).observe(max(0.0, float(duration_seconds)))
+        API_REQUESTS_TOTAL.labels(
+            method=method.upper(), endpoint=norm_endpoint, status_code=str(status_code)
+        ).inc()
+        API_REQUEST_DURATION_SECONDS.labels(method=method.upper(), endpoint=norm_endpoint).observe(
+            max(0.0, float(duration_seconds))
+        )
     except Exception as exc:
         logger.warning(f"Telemetry warning: failed to record API metric: {exc}")
 

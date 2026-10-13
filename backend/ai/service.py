@@ -4,12 +4,12 @@ Adheres strictly to AI_ARCHITECTURE.md, ADR-005, and AI-001 through AI-020.
 Enforces strict boundaries: AI NEVER alters scores, runs commands, or fabricates findings.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.ai.local_provider import LocalProvider
-from backend.ai.mock_provider import MockProvider
 from backend.ai.models import (
     AIAnalysisPayload,
     AIAnalysisResult,
@@ -35,7 +35,7 @@ class AIInterpretationService:
     schema validation, graceful fallback synthesis, and database persistence.
     """
 
-    def __init__(self, provider: Optional[IAIProvider] = None) -> None:
+    def __init__(self, provider: IAIProvider | None = None) -> None:
         self._provider = provider or self._resolve_default_provider()
 
     @property
@@ -46,10 +46,9 @@ class AIInterpretationService:
         """Resolve concrete AI provider based on environment configuration (AI-005)."""
         provider_type = settings.AI_PROVIDER.lower()
 
-        if provider_type == "mock":
-            return MockProvider(model_name="mock-engine")
         if provider_type == "external":
             from backend.ai.external_provider import ExternalProvider
+
             return ExternalProvider(
                 model_name=settings.AI_MODEL_NAME,
                 temperature=settings.AI_TEMPERATURE,
@@ -64,17 +63,17 @@ class AIInterpretationService:
     def _generate_deterministic_fallback(
         self,
         scorecard: ScorecardResult,
-        evidence_records: List[Any],
-        runtime: Optional[RuntimeObservation] = None,
-        error_diagnostic: Optional[str] = None,
+        evidence_records: list[Any],
+        runtime: RuntimeObservation | None = None,
+        error_diagnostic: str | None = None,
     ) -> AIAnalysisResult:
         """
         Synthesize a deterministic, schema-compliant fallback when AI is offline or times out (AI-009).
         Guarantees that evaluation pipelines complete successfully and deterministic scores are preserved.
         """
         # Collect top negative findings
-        crit_risks: List[str] = []
-        recommendations: List[AIRecommendationItem] = []
+        crit_risks: list[str] = []
+        recommendations: list[AIRecommendationItem] = []
 
         for ev in evidence_records[:5]:
             title = getattr(ev, "title", "Finding observed")
@@ -89,13 +88,20 @@ class AIInterpretationService:
                         title=f"Remediate {title}",
                         category=cat_str,
                         priority=RecommendationPriority.HIGH,
-                        explanation=getattr(ev, "description", "Identified during static/runtime analysis.")[:200],
-                        actionable_steps=["Inspect referenced source code file", "Resolve detected violation"],
+                        explanation=getattr(
+                            ev, "description", "Identified during static/runtime analysis."
+                        )[:200],
+                        actionable_steps=[
+                            "Inspect referenced source code file",
+                            "Resolve detected violation",
+                        ],
                         related_evidence_ids=[ev_id],
                     )
                 )
 
         root_cause = runtime.failure_reason if (runtime and runtime.failure_code) else None
+        sec_dim = scorecard.dimensions.get("SECURITY") or scorecard.dimensions.get("Security")
+        sec_score_str = f"{sec_dim.score}/100.0" if sec_dim is not None else "N/A"
 
         fallback_payload = AIAnalysisPayload(
             executive_summary=(
@@ -107,15 +113,14 @@ class AIInterpretationService:
                 f"Repository achieved composite score of {scorecard.overall_score}. "
                 "Dimensional review indicates primary focus areas in Correctness, Security, and Maintainability."
             ),
-            security_risk_narrative=(
-                f"Security dimension evaluated at {scorecard.dimensions.get('SECURITY', scorecard.dimensions.get('Security', None)).score if 'SECURITY' in scorecard.dimensions or 'Security' in scorecard.dimensions else 'N/A'}/100.0."
-            ),
+            security_risk_narrative=f"Security dimension evaluated at {sec_score_str}.",
             runtime_failure_root_cause=root_cause,
             top_strengths=[
-                f"Scorecard evaluated across all 10 core dimensions",
+                "Scorecard evaluated across all 10 core dimensions",
                 f"Deterministic scoring version {scorecard.scoring_version} applied",
             ],
-            critical_risks=crit_risks or ["Maintain ongoing continuous testing and security hygiene."],
+            critical_risks=crit_risks
+            or ["Maintain ongoing continuous testing and security hygiene."],
             recommendations=recommendations,
         )
 
@@ -126,17 +131,18 @@ class AIInterpretationService:
             prompt_version=PROMPT_VERSION,
             duration_ms=1,
             success=False,
-            error_message=error_diagnostic or "AI provider unavailable; deterministic fallback synthesized (AI-009).",
+            error_message=error_diagnostic
+            or "AI provider unavailable; deterministic fallback synthesized (AI-009).",
             is_fallback=True,
         )
 
     async def interpret_evaluation(
         self,
         scorecard: ScorecardResult,
-        evidence_records: List[Any],
-        detection: Optional[TechnologyDetectionResult] = None,
-        runtime: Optional[RuntimeObservation] = None,
-        timeout_seconds: Optional[int] = None,
+        evidence_records: list[Any],
+        detection: TechnologyDetectionResult | None = None,
+        runtime: RuntimeObservation | None = None,
+        timeout_seconds: int | None = None,
     ) -> AIAnalysisResult:
         """
         Generate grounded qualitative interpretation and prioritized recommendations.
@@ -209,7 +215,9 @@ class AIInterpretationService:
                 ai_analysis_id=analysis_record.id,
                 title=rec.title,
                 category=rec.category,
-                priority=rec.priority.value if hasattr(rec.priority, "value") else str(rec.priority),
+                priority=rec.priority.value
+                if hasattr(rec.priority, "value")
+                else str(rec.priority),
                 explanation=rec.explanation,
                 actionable_steps=rec.actionable_steps,
                 related_evidence_ids=rec.related_evidence_ids,

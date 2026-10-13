@@ -4,6 +4,7 @@ FastAPI correlation ID and request tracing middleware.
 
 import time
 import uuid
+
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -49,12 +50,14 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             if request.url.path not in ("/health", "/metrics"):
                 logger.info(
                     f"{request.method} {request.url.path} {response.status_code} - {duration_ms:.2f}ms",
-                    extra={"extra_data": {
-                        "method": request.method,
-                        "path": request.url.path,
-                        "status_code": response.status_code,
-                        "duration_ms": round(duration_ms, 2),
-                    }},
+                    extra={
+                        "extra_data": {
+                            "method": request.method,
+                            "path": request.url.path,
+                            "status_code": response.status_code,
+                            "duration_ms": round(duration_ms, 2),
+                        }
+                    },
                 )
 
             return response

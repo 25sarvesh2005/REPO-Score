@@ -2,9 +2,6 @@
 Security sanitization engine: Environment isolation, buffer truncation, and secret redaction.
 """
 
-import re
-from typing import Dict, Optional, Tuple
-
 from backend.observability.logger import redact_secrets
 
 # Permitted container environment variables (whitelist)
@@ -40,7 +37,7 @@ SENSITIVE_KEY_SUBSTRINGS = {
     "PRIVATE",
 }
 
-DEFAULT_SANDBOX_ENV: Dict[str, str] = {
+DEFAULT_SANDBOX_ENV: dict[str, str] = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "LANG": "C.UTF-8",
     "LC_ALL": "C.UTF-8",
@@ -52,7 +49,7 @@ DEFAULT_SANDBOX_ENV: Dict[str, str] = {
 }
 
 
-def sanitize_environment(custom_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+def sanitize_environment(custom_env: dict[str, str] | None = None) -> dict[str, str]:
     """
     Construct a clean, strictly whitelisted environment dictionary.
     Eliminates all host credentials and environment variables.
@@ -75,7 +72,7 @@ def sanitize_environment(custom_env: Optional[Dict[str, str]] = None) -> Dict[st
     return clean_env
 
 
-def truncate_output(text: str, max_bytes: int = 10 * 1024 * 1024) -> Tuple[str, bool]:
+def truncate_output(text: str, max_bytes: int = 10 * 1024 * 1024) -> tuple[str, bool]:
     """
     Enforce hard output buffer limit (default 10MB) to prevent memory denial-of-service.
     Returns (truncated_text, is_truncated).

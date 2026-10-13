@@ -3,7 +3,6 @@ AI Auxiliary Reasoning, Explanation, and Remediation Subsystem.
 """
 
 from backend.ai.local_provider import LocalProvider
-from backend.ai.mock_provider import MockProvider
 from backend.ai.models import (
     AIAnalysisPayload,
     AIAnalysisResult,
@@ -25,7 +24,6 @@ __all__ = [
     "AIRecommendationItem",
     "IAIProvider",
     "LocalProvider",
-    "MockProvider",
     "PROMPT_VERSION",
     "RecommendationPriority",
     "SYSTEM_INSTRUCTION",

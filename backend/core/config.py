@@ -2,7 +2,6 @@
 Application configuration management using Pydantic Settings.
 """
 
-from typing import List
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,9 +26,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = Field(default="/api/v1")
     HOST: str = Field(default="0.0.0.0")
     PORT: int = Field(default=8000)
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://127.0.0.1:3000"]
-    )
+    CORS_ORIGINS: list[str] = Field(default=["http://localhost:3000", "http://127.0.0.1:3000"])
 
     # PostgreSQL Relational Datastore
     DATABASE_URL: str = Field(
@@ -57,12 +54,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = Field(default=120, ge=10, le=10000)
 
     # Sandbox Security & Resource Quotas
-    SANDBOX_DEFAULT_IMAGE_PYTHON: str = Field(
-        default="reposcore/sandbox-python:3.11-slim"
-    )
-    SANDBOX_DEFAULT_IMAGE_NODE: str = Field(
-        default="reposcore/sandbox-node:20-slim"
-    )
+    SANDBOX_PROVIDER: str = Field(default="docker")
+    SANDBOX_DEFAULT_IMAGE_PYTHON: str = Field(default="reposcore/sandbox-python:3.11-slim")
+    SANDBOX_DEFAULT_IMAGE_NODE: str = Field(default="reposcore/sandbox-node:20-slim")
     SANDBOX_MAX_MEMORY_MB: int = Field(default=2048, ge=512, le=8192)
     SANDBOX_MAX_CPUS: float = Field(default=2.0, ge=0.5, le=8.0)
     SANDBOX_MAX_PIDS: int = Field(default=128, ge=32, le=1024)
@@ -83,10 +77,19 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid LOG_LEVEL '{v}'. Must be one of {valid_levels}")
         return upper_v
 
+    @field_validator("SANDBOX_PROVIDER")
+    @classmethod
+    def validate_sandbox_provider(cls, v: str) -> str:
+        valid_providers = {"docker"}
+        lower_v = v.lower()
+        if lower_v not in valid_providers:
+            raise ValueError(f"Invalid SANDBOX_PROVIDER '{v}'. Must be one of {valid_providers}")
+        return lower_v
+
     @field_validator("AI_PROVIDER")
     @classmethod
     def validate_ai_provider(cls, v: str) -> str:
-        valid_providers = {"ollama", "mock", "external"}
+        valid_providers = {"ollama", "external"}
         lower_v = v.lower()
         if lower_v not in valid_providers:
             raise ValueError(f"Invalid AI_PROVIDER '{v}'. Must be one of {valid_providers}")

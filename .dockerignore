@@ -1,0 +1,17 @@
+.git
+.github
+.env
+*.db
+*.sqlite
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+repo_snapshots
+reposcore.egg-info
+dist
+build
+.coverage
+coverage.xml

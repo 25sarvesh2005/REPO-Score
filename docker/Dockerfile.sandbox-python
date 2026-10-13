@@ -1,0 +1,34 @@
+# Hardened Python Sandbox Base Image for RepoScore
+# Enforces non-root execution (UID 10001), stripped privileges, and pre-seeded testing toolchain
+FROM python:3.11-slim
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install baseline build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install standard Python evaluation test suites and tooling
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir pytest ruff bandit coverage requests httpx
+
+# Create non-privileged sandbox user with fixed UID 10001
+RUN groupadd -g 10001 sandbox && \
+    useradd -u 10001 -g sandbox -s /bin/bash -m sandbox
+
+# Prepare workspace mount points with strict permissions
+RUN mkdir -p /workspace/src /workspace/build /tmp && \
+    chown -R sandbox:sandbox /workspace /tmp && \
+    chmod 1777 /tmp
+
+USER 10001:10001
+WORKDIR /workspace/build
+
+CMD ["tail", "-f", "/dev/null"]

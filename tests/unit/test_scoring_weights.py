@@ -3,6 +3,7 @@ Unit tests for scoring dimension weights and letter grade mapping.
 """
 
 from decimal import Decimal
+
 import pytest
 
 from backend.api.schemas.contracts import EvidenceCategory, LetterGrade

@@ -3,6 +3,7 @@ Unit tests for dependency vulnerability scanner adapter.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.analyzers.dependency_scanner import DependencyVulnerabilityAnalyzer
@@ -15,7 +16,9 @@ def dep_analyzer() -> DependencyVulnerabilityAnalyzer:
 
 
 @pytest.mark.asyncio
-async def test_detect_vulnerable_python_dependency(tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer) -> None:
+async def test_detect_vulnerable_python_dependency(
+    tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "requirements.txt").write_text(
@@ -37,7 +40,9 @@ async def test_detect_vulnerable_python_dependency(tmp_path: Path, dep_analyzer:
 
 
 @pytest.mark.asyncio
-async def test_detect_vulnerable_node_dependency(tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer) -> None:
+async def test_detect_vulnerable_node_dependency(
+    tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "package.json").write_text(
@@ -60,7 +65,9 @@ async def test_detect_vulnerable_node_dependency(tmp_path: Path, dep_analyzer: D
 
 
 @pytest.mark.asyncio
-async def test_safe_dependencies_zero_findings(tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer) -> None:
+async def test_safe_dependencies_zero_findings(
+    tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "requirements.txt").write_text(
@@ -74,7 +81,9 @@ async def test_safe_dependencies_zero_findings(tmp_path: Path, dep_analyzer: Dep
 
 
 @pytest.mark.asyncio
-async def test_malformed_requirements_handled_gracefully(tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer) -> None:
+async def test_malformed_requirements_handled_gracefully(
+    tmp_path: Path, dep_analyzer: DependencyVulnerabilityAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "requirements.txt").write_text(

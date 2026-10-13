@@ -3,10 +3,11 @@ Evaluation Orchestration and Exploration API Endpoints.
 Adheres strictly to docs/api/ENDPOINT_CATALOG.md Section 3.2 & 3.3, RFC 7807 problem details.
 """
 
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import List, Optional
+import contextlib
 import uuid
+from datetime import UTC, datetime
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,6 @@ from sqlalchemy.orm import selectinload
 from backend.api.errors import (
     ConflictException,
     EntityNotFoundException,
-    ValidationException,
 )
 from backend.api.schemas.contracts import (
     AIInterpretationResponse,
@@ -41,13 +41,11 @@ from backend.core.queue import get_job_queue
 from backend.database.models import (
     AIAnalysis,
     Evaluation,
-    EvaluationStep,
     Evidence,
     Repository,
     RepositorySnapshot,
     RuntimeObservation,
     Score,
-    ScoreDimension,
 )
 from backend.database.session import get_db_session
 from backend.observability.logger import correlation_id_ctx, get_logger
@@ -83,12 +81,16 @@ async def create_evaluation(
     repo_res = await session.execute(repo_stmt)
     repo = repo_res.scalar_one_or_none()
     if not repo:
-        raise EntityNotFoundException(detail=f"Repository '{request.repository_id}' does not exist.")
+        raise EntityNotFoundException(
+            detail=f"Repository '{request.repository_id}' does not exist."
+        )
 
     # 2. Find or create snapshot
-    snap_stmt = select(RepositorySnapshot).where(
-        RepositorySnapshot.repository_id == request.repository_id
-    ).order_by(desc(RepositorySnapshot.created_at))
+    snap_stmt = (
+        select(RepositorySnapshot)
+        .where(RepositorySnapshot.repository_id == request.repository_id)
+        .order_by(desc(RepositorySnapshot.created_at))
+    )
     snap_res = await session.execute(snap_stmt)
     snapshot = snap_res.scalars().first()
 
@@ -156,17 +158,17 @@ async def create_evaluation(
 
 @router.get(
     "",
-    response_model=List[EvaluationRecordResponse],
+    response_model=list[EvaluationRecordResponse],
     summary="List Evaluations",
     description="List evaluations with optional filtering by repository or status.",
 )
 async def list_evaluations(
-    repository_id: Optional[uuid.UUID] = None,
-    eval_status: Optional[EvaluationStatus] = Query(default=None, alias="status"),
+    repository_id: uuid.UUID | None = None,
+    eval_status: EvaluationStatus | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-) -> List[EvaluationRecordResponse]:
+) -> list[EvaluationRecordResponse]:
     stmt = select(Evaluation).order_by(desc(Evaluation.created_at)).limit(limit).offset(offset)
     if repository_id:
         stmt = stmt.where(Evaluation.repository_id == repository_id)
@@ -206,7 +208,11 @@ async def get_evaluation_status(
     evaluation_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> EvaluationStatusResponse:
-    stmt = select(Evaluation).options(selectinload(Evaluation.steps)).where(Evaluation.id == evaluation_id)
+    stmt = (
+        select(Evaluation)
+        .options(selectinload(Evaluation.steps))
+        .where(Evaluation.id == evaluation_id)
+    )
     result = await session.execute(stmt)
     evaluation = result.scalar_one_or_none()
     if not evaluation:
@@ -216,10 +222,10 @@ async def get_evaluation_status(
     if evaluation.started_at:
         started_at = evaluation.started_at
         if started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=timezone.utc)
-        ref_time = evaluation.completed_at or datetime.now(timezone.utc)
+            started_at = started_at.replace(tzinfo=UTC)
+        ref_time = evaluation.completed_at or datetime.now(UTC)
         if ref_time.tzinfo is None:
-            ref_time = ref_time.replace(tzinfo=timezone.utc)
+            ref_time = ref_time.replace(tzinfo=UTC)
         elapsed = max(0, int((ref_time - started_at).total_seconds()))
 
     current_step_name = None
@@ -227,9 +233,9 @@ async def get_evaluation_status(
         latest_step = sorted(
             evaluation.steps,
             key=lambda s: (
-                s.created_at.replace(tzinfo=timezone.utc)
+                s.created_at.replace(tzinfo=UTC)
                 if (s.created_at and s.created_at.tzinfo is None)
-                else (s.created_at or datetime.min.replace(tzinfo=timezone.utc))
+                else (s.created_at or datetime.min.replace(tzinfo=UTC))
             ),
             reverse=True,
         )[0]
@@ -263,7 +269,9 @@ async def cancel_evaluation(
         raise EntityNotFoundException(detail=f"Evaluation '{evaluation_id}' was not found.")
 
     if evaluation.status in TERMINAL_STATUSES:
-        raise ConflictException(detail=f"Cannot cancel evaluation in terminal state '{evaluation.status.value}'.")
+        raise ConflictException(
+            detail=f"Cannot cancel evaluation in terminal state '{evaluation.status.value}'."
+        )
 
     # Request cancellation on queue
     job_queue = get_job_queue()
@@ -271,7 +279,7 @@ async def cancel_evaluation(
 
     # Transition status
     evaluation.status = EvaluationStatus.CANCELLED
-    evaluation.completed_at = datetime.now(timezone.utc)
+    evaluation.completed_at = datetime.now(UTC)
     evaluation.error_summary = "Evaluation cancelled by user request."
     await session.flush()
 
@@ -292,10 +300,14 @@ async def get_evaluation_score(
     evaluation_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> ScorecardResponse:
-    stmt = select(Evaluation).options(
-        selectinload(Evaluation.score).selectinload(Score.dimensions),
-        selectinload(Evaluation.ai_analysis),
-    ).where(Evaluation.id == evaluation_id)
+    stmt = (
+        select(Evaluation)
+        .options(
+            selectinload(Evaluation.score).selectinload(Score.dimensions),
+            selectinload(Evaluation.ai_analysis),
+        )
+        .where(Evaluation.id == evaluation_id)
+    )
     result = await session.execute(stmt)
     evaluation = result.scalar_one_or_none()
 
@@ -304,20 +316,26 @@ async def get_evaluation_score(
 
     if not evaluation.score:
         if evaluation.status not in TERMINAL_STATUSES:
-            raise ConflictException(detail=f"Evaluation is in '{evaluation.status.value}' state; score is not finalized yet.")
-        raise EntityNotFoundException(detail=f"No scorecard available for evaluation in state '{evaluation.status.value}'.")
+            raise ConflictException(
+                detail=f"Evaluation is in '{evaluation.status.value}' state; score is not finalized yet."
+            )
+        raise EntityNotFoundException(
+            detail=f"No scorecard available for evaluation in state '{evaluation.status.value}'."
+        )
 
     score = evaluation.score
     dimension_responses = []
     for d in score.dimensions:
         receipt_items = []
-        for r in (d.itemized_receipt or []):
+        for r in d.itemized_receipt or []:
             if isinstance(r, dict):
                 receipt_items.append(
                     ItemizedReceiptItem(
                         type=r.get("type", "DEDUCTION"),
                         rule_code=r.get("rule_code", "UNKNOWN"),
-                        evidence_id=uuid.UUID(r.get("evidence_id")) if isinstance(r.get("evidence_id"), str) else (r.get("evidence_id") or uuid.uuid4()),
+                        evidence_id=uuid.UUID(r.get("evidence_id"))
+                        if isinstance(r.get("evidence_id"), str)
+                        else (r.get("evidence_id") or uuid.uuid4()),
                         description=r.get("description", ""),
                         points=Decimal(str(r.get("points", "0"))),
                         confidence=float(r.get("confidence", 1.0)),
@@ -339,10 +357,8 @@ async def get_evaluation_score(
 
     # Map grade string to enum
     grade_enum = LetterGrade.F
-    try:
+    with contextlib.suppress(Exception):
         grade_enum = LetterGrade(score.grade)
-    except Exception:
-        pass
 
     return ScorecardResponse(
         evaluation_id=evaluation.id,
@@ -363,8 +379,8 @@ async def get_evaluation_score(
 )
 async def get_evaluation_evidence(
     evaluation_id: uuid.UUID,
-    category: Optional[EvidenceCategory] = None,
-    severity: Optional[SeverityLevel] = None,
+    category: EvidenceCategory | None = None,
+    severity: SeverityLevel | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
@@ -455,13 +471,17 @@ async def get_evaluation_runtime(
     evaluator_strat = "generic"
 
     for obs in obs_rows:
-        observations_list.append({
-            "type": obs.observation_type,
-            "sampled_at": obs.sampled_at.isoformat() if obs.sampled_at else None,
-            "numeric_value": float(obs.metric_value_numeric) if obs.metric_value_numeric is not None else None,
-            "string_value": obs.metric_value_string,
-            "metadata": obs.metadata_json,
-        })
+        observations_list.append(
+            {
+                "type": obs.observation_type,
+                "sampled_at": obs.sampled_at.isoformat() if obs.sampled_at else None,
+                "numeric_value": float(obs.metric_value_numeric)
+                if obs.metric_value_numeric is not None
+                else None,
+                "string_value": obs.metric_value_string,
+                "metadata": obs.metadata_json,
+            }
+        )
         meta = obs.metadata_json or {}
         if obs.observation_type == "BUILD":
             build_exit_code = meta.get("exit_code")
@@ -478,9 +498,16 @@ async def get_evaluation_runtime(
 
     failure_code = None
     failure_reason = None
-    if evaluation.status in {EvaluationStatus.BUILD_FAILED, EvaluationStatus.STARTUP_FAILED, EvaluationStatus.FAILED}:
+    if evaluation.status in {
+        EvaluationStatus.BUILD_FAILED,
+        EvaluationStatus.STARTUP_FAILED,
+        EvaluationStatus.FAILED,
+    }:
         failure_code = evaluation.status.value
-        failure_reason = evaluation.error_summary or f"Runtime execution ended with state {evaluation.status.value}."
+        failure_reason = (
+            evaluation.error_summary
+            or f"Runtime execution ended with state {evaluation.status.value}."
+        )
 
     return RuntimeTelemetryResponse(
         evaluation_id=evaluation.id,
@@ -508,8 +535,10 @@ async def get_evaluation_ai_interpretation(
     evaluation_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> AIInterpretationResponse:
-    stmt = select(AIAnalysis).options(selectinload(AIAnalysis.recommendations)).where(
-        AIAnalysis.evaluation_id == evaluation_id
+    stmt = (
+        select(AIAnalysis)
+        .options(selectinload(AIAnalysis.recommendations))
+        .where(AIAnalysis.evaluation_id == evaluation_id)
     )
     result = await session.execute(stmt)
     analysis = result.scalar_one_or_none()
@@ -520,18 +549,22 @@ async def get_evaluation_ai_interpretation(
         eval_res = await session.execute(eval_stmt)
         if not eval_res.scalar_one_or_none():
             raise EntityNotFoundException(detail=f"Evaluation '{evaluation_id}' was not found.")
-        raise EntityNotFoundException(detail=f"AI interpretation not available for evaluation '{evaluation_id}'.")
+        raise EntityNotFoundException(
+            detail=f"AI interpretation not available for evaluation '{evaluation_id}'."
+        )
 
     recs = []
     for r in analysis.recommendations:
-        recs.append({
-            "title": r.title,
-            "category": r.category,
-            "priority": r.priority,
-            "explanation": r.explanation,
-            "actionable_steps": r.actionable_steps,
-            "related_evidence_ids": [str(eid) for eid in r.related_evidence_ids],
-        })
+        recs.append(
+            {
+                "title": r.title,
+                "category": r.category,
+                "priority": r.priority,
+                "explanation": r.explanation,
+                "actionable_steps": r.actionable_steps,
+                "related_evidence_ids": [str(eid) for eid in r.related_evidence_ids],
+            }
+        )
 
     return AIInterpretationResponse(
         evaluation_id=analysis.evaluation_id,
@@ -543,17 +576,21 @@ async def get_evaluation_ai_interpretation(
         security_risk_narrative=analysis.security_risk_narrative,
         runtime_failure_root_cause=analysis.runtime_failure_root_cause,
         top_strengths=["Empirical tests passing", "Type safety enforced"],
-        critical_risks=["Hardcoded secrets detected" if "secret" in analysis.security_risk_narrative.lower() else "Outdated dependencies"],
+        critical_risks=[
+            "Hardcoded secrets detected"
+            if "secret" in analysis.security_risk_narrative.lower()
+            else "Outdated dependencies"
+        ],
         recommendations=recs,
         tokens_consumed=analysis.tokens_consumed,
         duration_ms=analysis.duration_ms,
-        is_fallback=(analysis.provider == "mock"),
+        is_fallback=(analysis.provider in {"fallback", "heuristic"}),
     )
 
 
 @router.get(
     "/{evaluation_id}/history",
-    response_model=List[EvaluationHistoryItemResponse],
+    response_model=list[EvaluationHistoryItemResponse],
     summary="Get Evaluation History",
     description="Retrieve historical evaluation runs for the same repository.",
 )
@@ -561,7 +598,7 @@ async def get_evaluation_history(
     evaluation_id: uuid.UUID,
     limit: int = Query(default=10, ge=1, le=50),
     session: AsyncSession = Depends(get_db_session),
-) -> List[EvaluationHistoryItemResponse]:
+) -> list[EvaluationHistoryItemResponse]:
     # 1. Fetch current evaluation to get repository_id
     eval_stmt = select(Evaluation).where(Evaluation.id == evaluation_id)
     eval_res = await session.execute(eval_stmt)
@@ -570,12 +607,16 @@ async def get_evaluation_history(
         raise EntityNotFoundException(detail=f"Evaluation '{evaluation_id}' was not found.")
 
     # 2. Query evaluations for this repository
-    hist_stmt = select(Evaluation).options(
-        selectinload(Evaluation.score),
-        selectinload(Evaluation.snapshot),
-    ).where(
-        Evaluation.repository_id == current_eval.repository_id
-    ).order_by(desc(Evaluation.created_at)).limit(limit)
+    hist_stmt = (
+        select(Evaluation)
+        .options(
+            selectinload(Evaluation.score),
+            selectinload(Evaluation.snapshot),
+        )
+        .where(Evaluation.repository_id == current_eval.repository_id)
+        .order_by(desc(Evaluation.created_at))
+        .limit(limit)
+    )
 
     result = await session.execute(hist_stmt)
     records = result.scalars().all()
@@ -585,10 +626,8 @@ async def get_evaluation_history(
         overall = r.score.overall_score if r.score else None
         grade = None
         if r.score:
-            try:
+            with contextlib.suppress(Exception):
                 grade = LetterGrade(r.score.grade)
-            except Exception:
-                pass
 
         commit = r.snapshot.commit_sha if r.snapshot else None
         items.append(

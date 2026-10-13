@@ -1,0 +1,29 @@
+# Hardened Node.js Sandbox Base Image for RepoScore
+# Enforces non-root execution (UID 10001), stripped privileges, and pre-seeded testing toolchain
+FROM node:20-slim
+
+ENV NODE_ENV=development
+
+# Install baseline dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-install typescript, jest, and ts-node globally for test evaluation
+RUN npm install -g typescript jest ts-node
+
+# Create non-privileged sandbox user with fixed UID 10001
+RUN groupadd -g 10001 sandbox && \
+    useradd -u 10001 -g sandbox -s /bin/bash -m sandbox
+
+# Prepare workspace mount points with strict permissions
+RUN mkdir -p /workspace/src /workspace/build /tmp && \
+    chown -R sandbox:sandbox /workspace /tmp && \
+    chmod 1777 /tmp
+
+USER 10001:10001
+WORKDIR /workspace/build
+
+CMD ["tail", "-f", "/dev/null"]

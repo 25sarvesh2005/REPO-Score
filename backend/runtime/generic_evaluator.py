@@ -4,10 +4,10 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md Section 1 and ADR-009.
 Handles generic builds and unclassified or unsupported repository architectures gracefully.
 """
 
-from pathlib import Path
 import time
-from typing import Any, Dict, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.builder import execute_build
@@ -39,7 +39,7 @@ class GenericEvaluator(BaseRuntimeEvaluator):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         ctx = context or {}
         evaluation_id = ctx.get("evaluation_id", str(uuid.uuid4()))
@@ -70,7 +70,11 @@ class GenericEvaluator(BaseRuntimeEvaluator):
         failure_reason = (
             "Repository technology stack is unsupported for automated runtime execution"
             if is_unsupported
-            else (None if build_result.success else f"Build failed with exit code {build_result.exit_code}")
+            else (
+                None
+                if build_result.success
+                else f"Build failed with exit code {build_result.exit_code}"
+            )
         )
 
         return RuntimeObservation(

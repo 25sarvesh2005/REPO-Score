@@ -3,13 +3,10 @@ Hardened asynchronous Git ingestion engine with hook neutralization and resource
 """
 
 import asyncio
-from datetime import datetime, timezone
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
-import shutil
-import tempfile
-from typing import Dict, Optional, Tuple
 
 from backend.api.errors import RepoScoreException
 from backend.core.config import settings
@@ -81,7 +78,7 @@ class IngestionCorruptGitError(IngestionError):
 class GitIngestionClient:
     """
     Hardened Git ingestion engine.
-    
+
     Guarantees:
     - Never executes repository hooks (`core.hooksPath=/dev/null`).
     - Disallows local filesystem protocols (`protocol.file.allow=never`).
@@ -91,7 +88,7 @@ class GitIngestionClient:
 
     def __init__(
         self,
-        timeout_seconds: Optional[int] = None,
+        timeout_seconds: int | None = None,
         allow_submodules: bool = False,
     ) -> None:
         self.timeout_seconds = timeout_seconds or settings.INGESTION_TIMEOUT_SECONDS
@@ -100,9 +97,9 @@ class GitIngestionClient:
     async def _run_git_command(
         self,
         args: list[str],
-        cwd: Optional[Path] = None,
-        timeout: Optional[int] = None,
-    ) -> Tuple[int, str, str]:
+        cwd: Path | None = None,
+        timeout: int | None = None,
+    ) -> tuple[int, str, str]:
         """Execute a git command with timeout and process cleanup."""
         cmd_timeout = timeout or self.timeout_seconds
         process = None
@@ -128,7 +125,7 @@ class GitIngestionClient:
             stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
             return process.returncode or 0, stdout, stderr
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             if process:
                 try:
                     process.kill()
@@ -151,12 +148,24 @@ class GitIngestionClient:
     def _classify_git_error(self, stderr: str, returncode: int) -> IngestionError:
         """Categorize git command failure output into structured domain errors."""
         lower_err = stderr.lower()
-        if "not found" in lower_err or "could not read from remote" in lower_err or "404" in lower_err:
+        if (
+            "not found" in lower_err
+            or "could not read from remote" in lower_err
+            or "404" in lower_err
+        ):
             return IngestionNotFoundError(f"Repository not found or inaccessible: {stderr}")
-        if "authentication" in lower_err or "permission denied" in lower_err or "invalid username or password" in lower_err:
+        if (
+            "authentication" in lower_err
+            or "permission denied" in lower_err
+            or "invalid username or password" in lower_err
+        ):
             return IngestionAuthError(f"Authentication failed or repository is private: {stderr}")
         if "rate limit" in lower_err or "429" in lower_err:
-            return IngestionError(f"GitHub API rate limit exceeded: {stderr}", IngestionFailureReason.RATE_LIMITED, 429)
+            return IngestionError(
+                f"GitHub API rate limit exceeded: {stderr}",
+                IngestionFailureReason.RATE_LIMITED,
+                429,
+            )
         if "corrupt" in lower_err or "fatal: bad object" in lower_err or "pack has" in lower_err:
             return IngestionCorruptGitError(f"Corrupt Git objects encountered: {stderr}")
         return IngestionError(
@@ -169,11 +178,11 @@ class GitIngestionClient:
         self,
         canonical_url: str,
         target_dir: Path,
-        ref: Optional[str] = None,
-    ) -> Dict[str, str]:
+        ref: str | None = None,
+    ) -> dict[str, str]:
         """
         Safely clone a repository into target_dir.
-        
+
         Returns metadata:
         - commit_sha: Resolved 40-character commit SHA
         - commit_message: Commit summary
@@ -182,11 +191,15 @@ class GitIngestionClient:
         """
         # Hardened git arguments
         clone_args = [
-            "-c", "core.hooksPath=/dev/null",
-            "-c", "http.sslVerify=true",
-            "-c", "protocol.file.allow=never",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "http.sslVerify=true",
+            "-c",
+            "protocol.file.allow=never",
             "clone",
-            "--depth", "1",
+            "--depth",
+            "1",
         ]
 
         if not self.allow_submodules:
@@ -203,15 +216,21 @@ class GitIngestionClient:
         # If branch clone failed because requested branch was not found, fallback to upstream default branch
         if returncode != 0 and ref and not is_full_commit_sha(ref):
             if "remote branch" in stderr.lower() and "not found" in stderr.lower():
-                logger.info(f"Requested branch '{ref}' not found upstream, falling back to default branch.")
+                logger.info(
+                    f"Requested branch '{ref}' not found upstream, falling back to default branch."
+                )
                 safe_remove_directory(target_dir)
                 target_dir.mkdir(parents=True, exist_ok=True)
                 fallback_branch_args = [
-                    "-c", "core.hooksPath=/dev/null",
-                    "-c", "http.sslVerify=true",
-                    "-c", "protocol.file.allow=never",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "http.sslVerify=true",
+                    "-c",
+                    "protocol.file.allow=never",
                     "clone",
-                    "--depth", "1",
+                    "--depth",
+                    "1",
                 ]
                 if not self.allow_submodules:
                     fallback_branch_args.extend(["--recurse-submodules=no"])
@@ -226,9 +245,12 @@ class GitIngestionClient:
             target_dir.mkdir(parents=True, exist_ok=True)
 
             fallback_args = [
-                "-c", "core.hooksPath=/dev/null",
-                "-c", "http.sslVerify=true",
-                "-c", "protocol.file.allow=never",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "http.sslVerify=true",
+                "-c",
+                "protocol.file.allow=never",
                 "clone",
                 "--no-checkout",
                 canonical_url,
@@ -254,9 +276,7 @@ class GitIngestionClient:
             safe_remove_directory(hooks_dir)
 
         # Resolve exact 40-character commit SHA
-        rc, sha_out, sha_err = await self._run_git_command(
-            ["rev-parse", "HEAD"], cwd=target_dir
-        )
+        rc, sha_out, sha_err = await self._run_git_command(["rev-parse", "HEAD"], cwd=target_dir)
         if rc != 0 or len(sha_out) != 40:
             safe_remove_directory(target_dir)
             raise IngestionCorruptGitError(f"Failed to resolve HEAD commit SHA: {sha_err}")
@@ -279,5 +299,5 @@ class GitIngestionClient:
             "commit_sha": commit_sha,
             "commit_message": commit_message,
             "author_name": author_name,
-            "commit_date": commit_date or datetime.now(timezone.utc).isoformat(),
+            "commit_date": commit_date or datetime.now(UTC).isoformat(),
         }

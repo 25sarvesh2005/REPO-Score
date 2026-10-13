@@ -4,7 +4,6 @@ Unit tests for domain exceptions and RFC 7807 Problem Details.
 
 from backend.api.errors import (
     EntityNotFoundException,
-    RepoScoreException,
     build_problem_payload,
 )
 

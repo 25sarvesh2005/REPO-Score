@@ -6,7 +6,8 @@ Default, free-first, privacy-preserving local execution with zero third-party cl
 
 import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any
+
 import httpx
 from pydantic import ValidationError
 
@@ -55,7 +56,7 @@ class LocalProvider(IAIProvider):
         t0 = time.monotonic()
         url = f"{self._base_url}/api/generate"
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model_name,
             "prompt": prompt,
             "system": system_instruction,

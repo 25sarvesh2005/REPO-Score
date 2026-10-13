@@ -5,18 +5,14 @@ and network isolation constraints.
 """
 
 import asyncio
-from datetime import datetime, timezone
 import logging
-import os
-import shutil
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 
 from backend.sandbox.exceptions import (
     SandboxError,
-    SandboxOOMError,
-    SandboxTimeoutError,
     SandboxUnavailableError,
 )
 from backend.sandbox.interface import ISandbox, ISandboxManager
@@ -61,8 +57,8 @@ class DockerSandbox(ISandbox):
 
     async def execute(
         self,
-        command: List[str],
-        timeout_seconds: Optional[int] = None,
+        command: list[str],
+        timeout_seconds: int | None = None,
     ) -> SandboxExecutionResult:
         """
         Execute command inside the active container via 'docker exec'.
@@ -97,7 +93,7 @@ class DockerSandbox(ISandbox):
             if exit_code == 137:
                 oom_killed = True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             timed_out = True
             exit_code = 124
             raw_stdout = ""
@@ -142,7 +138,11 @@ class DockerSandbox(ISandbox):
         try:
             # Force kill and remove container with volumes
             kill_proc = await asyncio.create_subprocess_exec(
-                "docker", "rm", "-f", "-v", self._container_name,
+                "docker",
+                "rm",
+                "-f",
+                "-v",
+                self._container_name,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -150,17 +150,24 @@ class DockerSandbox(ISandbox):
         except Exception as exc:
             logger.warning(f"Error terminating container {self._container_name}: {exc}")
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Fetch container resource metrics via 'docker stats'."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "docker", "stats", "--no-stream", "--format", "{{json .}}", self._container_name,
+                "docker",
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{json .}}",
+                self._container_name,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
             import json
-            return json.loads(stdout_bytes.decode("utf-8").strip())
+
+            parsed = json.loads(stdout_bytes.decode("utf-8").strip())
+            return dict(parsed) if isinstance(parsed, dict) else {}
         except Exception:
             return {}
 
@@ -174,7 +181,8 @@ class DockerSandboxManager(ISandboxManager):
         """Check if Docker CLI / Daemon is accessible on the host."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "docker", "info",
+                "docker",
+                "info",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -182,6 +190,49 @@ class DockerSandboxManager(ISandboxManager):
             return proc.returncode == 0
         except Exception:
             return False
+
+    OFFICIAL_IMAGE_FALLBACKS: dict[str, str] = {
+        "reposcore/sandbox-python:3.11-slim": "python:3.11-slim",
+        "reposcore/sandbox-node:20-slim": "node:20-slim",
+        "reposcore/sandbox-go:1.22-alpine": "golang:1.22-alpine",
+        "reposcore/sandbox-rust:1.77-slim": "rust:1.77-slim",
+        "reposcore/sandbox-java:21-temurin": "eclipse-temurin:21-jre-alpine",
+    }
+
+    async def _image_exists_locally(self, image_name: str) -> bool:
+        """Check if image exists in the local Docker daemon image cache."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                "image",
+                "inspect",
+                image_name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=5)
+            return proc.returncode == 0
+        except Exception:
+            return False
+
+    async def _resolve_image(self, requested_image: str) -> str:
+        """Resolve requested image with graceful fallback to standard official library images."""
+        if await self._image_exists_locally(requested_image):
+            return requested_image
+
+        fallback = self.OFFICIAL_IMAGE_FALLBACKS.get(requested_image)
+        if fallback:
+            if await self._image_exists_locally(fallback):
+                logger.info(
+                    f"Custom sandbox image '{requested_image}' not found locally. Using cached fallback '{fallback}'."
+                )
+                return fallback
+            logger.info(
+                f"Custom image '{requested_image}' not found. Defaulting to official base image '{fallback}'."
+            )
+            return fallback
+
+        return requested_image
 
     async def create_sandbox(self, config: SandboxConfig) -> ISandbox:
         """
@@ -196,13 +247,17 @@ class DockerSandboxManager(ISandboxManager):
                 "Docker daemon is not running or accessible. Host execution fallback is strictly prohibited."
             )
 
+        resolved_image = await self._resolve_image(config.image)
         container_name = f"reposcore-sbx-{uuid.uuid4().hex[:12]}"
         sanitized_env = sanitize_environment(config.environment)
 
         # Step 3: Build hardened docker run arguments
         run_args = [
-            "docker", "run", "-d",
-            "--name", container_name,
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            container_name,
             f"--user={config.user}",
             "--read-only",
             f"--memory={config.memory_limit}",
@@ -236,12 +291,12 @@ class DockerSandboxManager(ISandboxManager):
             run_args.append(f"-e={k}={v}")
 
         # Labels
-        run_args.append(f"--label=reposcore.managed=true")
-        run_args.append(f"--label=reposcore.created_at={datetime.now(timezone.utc).isoformat()}")
+        run_args.append("--label=reposcore.managed=true")
+        run_args.append(f"--label=reposcore.created_at={datetime.now(UTC).isoformat()}")
         for lk, lv in config.labels.items():
             run_args.append(f"--label={lk}={lv}")
 
-        run_args.append(config.image)
+        run_args.append(resolved_image)
 
         # Tail sleep to keep container alive for interactive command execution
         run_args.extend(["tail", "-f", "/dev/null"])
@@ -252,7 +307,24 @@ class DockerSandboxManager(ISandboxManager):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=30)
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=45)
+
+        # If custom image failed to spawn, try official fallback image as last resort
+        if proc.returncode != 0 and resolved_image != self.OFFICIAL_IMAGE_FALLBACKS.get(
+            config.image
+        ):
+            fallback_img = self.OFFICIAL_IMAGE_FALLBACKS.get(config.image)
+            if fallback_img:
+                logger.warning(
+                    f"Spawn with '{resolved_image}' failed. Retrying with fallback '{fallback_img}'..."
+                )
+                run_args[-2] = fallback_img
+                proc = await asyncio.create_subprocess_exec(
+                    *run_args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=45)
 
         if proc.returncode != 0:
             err_msg = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -273,7 +345,13 @@ class DockerSandboxManager(ISandboxManager):
         purged_count = 0
         try:
             proc = await asyncio.create_subprocess_exec(
-                "docker", "ps", "-a", "--filter", "label=reposcore.managed=true", "--format", "{{.ID}}",
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "label=reposcore.managed=true",
+                "--format",
+                "{{.ID}}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -282,7 +360,11 @@ class DockerSandboxManager(ISandboxManager):
             for cid in cids:
                 if cid:
                     rm_proc = await asyncio.create_subprocess_exec(
-                        "docker", "rm", "-f", "-v", cid.strip(),
+                        "docker",
+                        "rm",
+                        "-f",
+                        "-v",
+                        cid.strip(),
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
                     )

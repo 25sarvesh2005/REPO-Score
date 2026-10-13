@@ -9,52 +9,95 @@ Adheres strictly to Phase 13 requirements:
 """
 
 import asyncio
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-import tempfile
 from unittest.mock import AsyncMock, MagicMock
-import uuid
+
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.ai.mock_provider import MockProvider
+from backend.ai.models import AIAnalysisPayload, AIAnalysisResult
+from backend.ai.provider import IAIProvider
 from backend.ai.service import AIInterpretationService
-from backend.analyzers.registry import AnalyzerRegistry
 from backend.api.schemas.contracts import (
     EvaluationStatus,
-    EvidenceCategory,
     LetterGrade,
-    SeverityLevel,
 )
 from backend.core.queue import InMemoryJobQueue
 from backend.database.models import (
-    AIAnalysis,
     Evaluation,
-    EvaluationStep,
-    Evidence,
     Repository,
     RepositorySnapshot,
-    RuntimeObservation as RuntimeObservationModel,
-    Score,
-    ScoreDimension,
 )
 from backend.pipeline.models import PipelineExecutionResult
 from backend.pipeline.orchestrator import EvaluationPipelineOrchestrator
 from backend.pipeline.worker import EvaluationWorker
-from backend.repository.service import RepositoryIngestionService
 from backend.runtime.dispatcher import RuntimeDispatcher
 from backend.runtime.models import (
     BuildResult,
     EvaluatorType,
-    HttpMetrics,
     RuntimeFailureCode,
     RuntimeObservation,
-    StartupResult,
 )
-from backend.sandbox.mock import MockSandboxManager
-from backend.scoring.calculator import DeterministicScoringEngine
+from backend.sandbox.interface import ISandbox, ISandboxManager
+from backend.sandbox.models import SandboxExecutionResult, SandboxState
+
+
+def _make_mock_sandbox_manager() -> ISandboxManager:
+    sbx = AsyncMock(spec=ISandbox)
+    sbx.state = SandboxState.RUNNING
+
+    def _execute(cmd, **kwargs):
+        cmd_str = " ".join(cmd)
+        if "urllib.request" in cmd_str and "endpoint" in cmd_str:
+            return SandboxExecutionResult(
+                exit_code=0,
+                stdout='{"ready": true, "endpoint": "/health", "status": 200}',
+                stderr="",
+            )
+        if "urllib.request" in cmd_str and (
+            "count" in cmd_str or "times" in cmd_str or "successful" in cmd_str
+        ):
+            return SandboxExecutionResult(
+                exit_code=0,
+                stdout='{"total": 50, "successful": 50, "error_4xx": 0, "error_5xx": 0, "p50_ms": 4.5, "p95_ms": 12.0, "p99_ms": 18.0}',
+                stderr="",
+            )
+        return SandboxExecutionResult(exit_code=0, stdout="build ok", stderr="")
+
+    sbx.execute = AsyncMock(side_effect=_execute)
+    sbx.get_stats = AsyncMock(return_value={"memory_usage": 1024, "memory_limit": 2048})
+    sbx.terminate = AsyncMock()
+
+    mgr = AsyncMock(spec=ISandboxManager)
+    mgr.is_available = AsyncMock(return_value=True)
+    mgr.create_sandbox = AsyncMock(return_value=sbx)
+    return mgr
+
+
+def _make_mock_ai_service() -> AIInterpretationService:
+    prov = AsyncMock(spec=IAIProvider)
+    prov.provider_name = "ollama"
+    prov.model_name = "llama3.2:3b"
+    prov.is_available = AsyncMock(return_value=True)
+    prov.generate_analysis = AsyncMock(
+        return_value=AIAnalysisResult(
+            payload=AIAnalysisPayload(
+                executive_summary="The repository is well-structured with modular architecture and passing tests.",
+                architectural_assessment="Clean architectural layer separation with clear boundaries and loose coupling.",
+                security_risk_narrative="Zero critical vulnerabilities detected.",
+                top_strengths=["Passing tests", "Type safety"],
+                critical_risks=["Pin dependencies"],
+                recommendations=[],
+            ),
+            provider="ollama",
+            model_name="llama3.2:3b",
+            success=True,
+        )
+    )
+    return AIInterpretationService(provider=prov)
 
 
 @pytest.fixture
@@ -67,10 +110,10 @@ def temp_fixture_repo(tmp_path: Path):
     main_py = repo_dir / "main.py"
     main_py.write_text(
         '"""FastAPI service sample."""\n'
-        'from fastapi import FastAPI\n'
-        'app = FastAPI()\n\n'
+        "from fastapi import FastAPI\n"
+        "app = FastAPI()\n\n"
         '@app.get("/health")\n'
-        'def health():\n'
+        "def health():\n"
         '    return {"status": "ok"}\n',
         encoding="utf-8",
     )
@@ -129,7 +172,7 @@ async def test_pipeline_e2e_clean_repository(temp_fixture_repo, mock_db_session)
         default_branch="master",
         is_private=False,
         stars_count=75000,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     snapshot = RepositorySnapshot(
@@ -144,7 +187,7 @@ async def test_pipeline_e2e_clean_repository(temp_fixture_repo, mock_db_session)
         detected_languages={"Python": 100},
         detected_frameworks=["FastAPI"],
         detected_entrypoints=["main.py"],
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     evaluation = Evaluation(
@@ -154,7 +197,7 @@ async def test_pipeline_e2e_clean_repository(temp_fixture_repo, mock_db_session)
         status=EvaluationStatus.QUEUED,
         correlation_id=corr_id,
         trigger_source="API",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     # Setup session query responses
@@ -178,8 +221,8 @@ async def test_pipeline_e2e_clean_repository(temp_fixture_repo, mock_db_session)
 
     # Setup orchestrator with real analyzers, scoring engine, and mock sandbox
     job_queue = InMemoryJobQueue()
-    sandbox_manager = MockSandboxManager()
-    ai_service = AIInterpretationService(provider=MockProvider())
+    sandbox_manager = _make_mock_sandbox_manager()
+    ai_service = _make_mock_ai_service()
 
     orchestrator = EvaluationPipelineOrchestrator(
         sandbox_manager=sandbox_manager,
@@ -274,7 +317,13 @@ async def test_pipeline_e2e_partial_completion_on_build_failure(temp_fixture_rep
         return_value=RuntimeObservation(
             evaluation_id=str(eval_id),
             evaluator_type=EvaluatorType.HTTP_API,
-            build_result=BuildResult(exit_code=1, stdout="", stderr="SyntaxError: invalid syntax", duration_ms=500, success=False),
+            build_result=BuildResult(
+                exit_code=1,
+                stdout="",
+                stderr="SyntaxError: invalid syntax",
+                duration_ms=500,
+                success=False,
+            ),
             failure_code=RuntimeFailureCode.BUILD_FAILURE,
             failure_reason="Compilation failed: SyntaxError in dependencies",
             critical_logs=["SyntaxError: invalid syntax"],
@@ -283,7 +332,7 @@ async def test_pipeline_e2e_partial_completion_on_build_failure(temp_fixture_rep
 
     orchestrator = EvaluationPipelineOrchestrator(
         runtime_dispatcher=mock_dispatcher,
-        ai_service=AIInterpretationService(provider=MockProvider()),
+        ai_service=_make_mock_ai_service(),
         job_queue=InMemoryJobQueue(),
     )
 
@@ -408,6 +457,7 @@ async def test_worker_run_once(temp_fixture_repo, mock_db_session):
     session.execute.return_value = mock_res_eval
 
     from contextlib import asynccontextmanager
+
     @asynccontextmanager
     async def mock_session_factory():
         yield session

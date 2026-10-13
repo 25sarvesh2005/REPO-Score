@@ -5,7 +5,7 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md and ADR-009.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from backend.repository.models import TechnologyDetectionResult
 from backend.runtime.models import EvaluatorType, RuntimeObservation
@@ -35,7 +35,7 @@ class BaseRuntimeEvaluator(ABC):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         """
         Execute sandboxed runtime evaluation, collect telemetry and observations,

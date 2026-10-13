@@ -1,0 +1,137 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: reposcore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reposcore_user
+      POSTGRES_PASSWORD: reposcore_pass
+      POSTGRES_DB: reposcore_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reposcore_user -d reposcore_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - reposcore-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: reposcore-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - reposcore-net
+
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reposcore-migration
+    command: ["alembic", "-c", "backend/database/alembic.ini", "upgrade", "head"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://reposcore_user:reposcore_pass@postgres:5432/reposcore_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - reposcore-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reposcore-api
+    restart: unless-stopped
+    command: ["uvicorn", "backend.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: RepoScore
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      DEBUG: "false"
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATABASE_URL: postgresql+asyncpg://reposcore_user:reposcore_pass@postgres:5432/reposcore_db
+      REDIS_URL: redis://redis:6379/0
+      SANDBOX_PROVIDER: docker
+      AI_PROVIDER: ollama
+      AI_BASE_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - reposcore-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reposcore-worker
+    restart: unless-stopped
+    command: ["python", "-m", "backend.pipeline.worker"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - repo_snapshots:/app/repo_snapshots
+    environment:
+      APP_NAME: RepoScore
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+asyncpg://reposcore_user:reposcore_pass@postgres:5432/reposcore_db
+      REDIS_URL: redis://redis:6379/0
+      SANDBOX_PROVIDER: docker
+      AI_PROVIDER: ollama
+      AI_BASE_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - reposcore-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: reposcore-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - reposcore-net
+    profiles:
+      - ai
+
+volumes:
+  postgres_data:
+  redis_data:
+  repo_snapshots:
+  ollama_data:
+
+networks:
+  reposcore-net:
+    driver: bridge

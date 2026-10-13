@@ -4,10 +4,11 @@ Adheres strictly to RUNTIME_ARCHITECTURE.md, ADR-002, ADR-009, and Prime Directi
 Ensures ZERO execution on host; routes evaluation strictly through isolated ISandbox instances.
 """
 
-from pathlib import Path
+import contextlib
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.cli_evaluator import CliEvaluator
@@ -21,12 +22,11 @@ from backend.runtime.models import (
     RuntimeObservation,
 )
 from backend.runtime.worker_evaluator import WorkerEvaluator
-from backend.sandbox.exceptions import SandboxError, SandboxTimeoutError, SandboxUnavailableError
+from backend.sandbox.exceptions import SandboxError, SandboxTimeoutError
 from backend.sandbox.interface import ISandboxManager
 from backend.sandbox.models import NetworkPolicy, SandboxConfig
 
-
-LANGUAGE_IMAGE_MAP: Dict[str, str] = {
+LANGUAGE_IMAGE_MAP: dict[str, str] = {
     "Python": "reposcore/sandbox-python:3.11-slim",
     "Node.js": "reposcore/sandbox-node:20-slim",
     "Go": "reposcore/sandbox-go:1.22-alpine",
@@ -41,8 +41,8 @@ class RuntimeDispatcher:
     hardened sandboxes, dispatches evaluation runs, and guarantees cleanup.
     """
 
-    def __init__(self, evaluators: Optional[List[BaseRuntimeEvaluator]] = None) -> None:
-        self._evaluators: List[BaseRuntimeEvaluator] = evaluators or [
+    def __init__(self, evaluators: list[BaseRuntimeEvaluator] | None = None) -> None:
+        self._evaluators: list[BaseRuntimeEvaluator] = evaluators or [
             HttpApiEvaluator(),
             CliEvaluator(),
             LibraryEvaluator(),
@@ -127,7 +127,7 @@ class RuntimeDispatcher:
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
         sandbox_manager: ISandboxManager,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         """
         Orchestrate end-to-end sandboxed runtime evaluation.
@@ -149,7 +149,9 @@ class RuntimeDispatcher:
                 duration_ms=duration_ms,
                 failure_code=RuntimeFailureCode.SANDBOX_ERROR,
                 failure_reason="Sandbox execution manager is unavailable on host. Refusing host execution.",
-                critical_logs=["Sandbox runtime unreachable; Prime Directive #4 strictly observed."],
+                critical_logs=[
+                    "Sandbox runtime unreachable; Prime Directive #4 strictly observed."
+                ],
             )
 
         # Step 2: Configure hardened sandbox
@@ -190,7 +192,5 @@ class RuntimeDispatcher:
             )
         finally:
             if sandbox is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await sandbox.terminate()
-                except Exception:
-                    pass

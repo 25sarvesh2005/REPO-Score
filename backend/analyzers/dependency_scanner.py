@@ -4,9 +4,9 @@ Statically parses dependency manifests and flags known vulnerable packages.
 """
 
 import json
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, TypedDict
 
 from packaging.version import InvalidVersion, Version
 
@@ -19,8 +19,21 @@ from backend.analyzers.models import (
 )
 from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
 
+
+class VulnerabilityRecord(TypedDict):
+    package: str
+    ecosystem: str
+    vulnerable_before: str
+    fixed_version: str
+    cve_id: str
+    cwe_ids: list[str]
+    severity: SeverityLevel
+    title: str
+    description: str
+
+
 # Curated OSV vulnerability records for known CVEs
-KNOWN_VULNERABILITIES = [
+KNOWN_VULNERABILITIES: list[VulnerabilityRecord] = [
     {
         "package": "requests",
         "ecosystem": "PyPI",
@@ -79,9 +92,9 @@ KNOWN_VULNERABILITIES = [
 ]
 
 
-def parse_requirements_txt(content: str) -> List[Tuple[str, str, int]]:
+def parse_requirements_txt(content: str) -> list[tuple[str, str, int]]:
     """Parse (package_name, version, line_number) from requirements.txt."""
-    dependencies: List[Tuple[str, str, int]] = []
+    dependencies: list[tuple[str, str, int]] = []
     lines = content.splitlines()
     for idx, line in enumerate(lines, start=1):
         clean_line = line.strip().split("#")[0]
@@ -98,9 +111,9 @@ def parse_requirements_txt(content: str) -> List[Tuple[str, str, int]]:
     return dependencies
 
 
-def parse_package_json(content: str) -> List[Tuple[str, str, int]]:
+def parse_package_json(content: str) -> list[tuple[str, str, int]]:
     """Parse dependencies from package.json."""
-    dependencies: List[Tuple[str, str, int]] = []
+    dependencies: list[tuple[str, str, int]] = []
     try:
         data = json.loads(content)
         deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
@@ -129,16 +142,16 @@ class DependencyVulnerabilityAnalyzer(BaseAnalyzer):
             description="Matches declared dependencies in requirements.txt and package.json against known CVE advisories.",
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         langs = tech_stack.get("detected_languages", {})
         return "Python" in langs or "Node.js" in langs
 
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
-        findings: List[NormalizedFinding] = []
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
+        findings: list[NormalizedFinding] = []
         resolved_root = snapshot_path.resolve()
 
         # Check Python requirements.txt

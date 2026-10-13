@@ -5,15 +5,16 @@ Untrusted build commands execute EXCLUSIVELY inside the isolated sandbox.
 """
 
 from pathlib import Path
-import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 from backend.repository.models import TechnologyDetectionResult
 from backend.runtime.models import BuildResult
 from backend.sandbox.interface import ISandbox
 
 
-def resolve_build_command(snapshot_path: Path, detection: TechnologyDetectionResult) -> Optional[List[str]]:
+def resolve_build_command(
+    snapshot_path: Path, detection: TechnologyDetectionResult
+) -> list[str] | None:
     """
     Deterministically resolve the safe package installation and compilation command
     based on static file detection. Enforces EVAL-022 security script neutralization.
@@ -25,7 +26,8 @@ def resolve_build_command(snapshot_path: Path, detection: TechnologyDetectionRes
         if (snapshot_path / "requirements.txt").exists():
             return ["pip", "install", "--no-cache-dir", "-r", "requirements.txt"]
         if (snapshot_path / "poetry.lock").exists() or (
-            (snapshot_path / "pyproject.toml").exists() and "poetry" in detection.detected_package_managers
+            (snapshot_path / "pyproject.toml").exists()
+            and "poetry" in detection.detected_package_managers
         ):
             return ["poetry", "install", "--no-root"]
         if (snapshot_path / "pyproject.toml").exists():
@@ -60,21 +62,26 @@ def resolve_build_command(snapshot_path: Path, detection: TechnologyDetectionRes
     if primary == "Java" or "Java" in detection.detected_languages:
         if (snapshot_path / "pom.xml").exists():
             return ["mvn", "compile", "-DskipTests"]
-        if (snapshot_path / "build.gradle").exists() or (snapshot_path / "build.gradle.kts").exists():
+        if (snapshot_path / "build.gradle").exists() or (
+            snapshot_path / "build.gradle.kts"
+        ).exists():
             gradle_cmd = "./gradlew" if (snapshot_path / "gradlew").exists() else "gradle"
             return [gradle_cmd, "classes", "-x", "test"]
 
     return None
 
 
-def categorize_build_error(stdout: str, stderr: str, exit_code: int) -> Tuple[str, Optional[str]]:
+def categorize_build_error(stdout: str, stderr: str, exit_code: int) -> tuple[str, str | None]:
     """
     Categorize compiler or dependency installation errors for diagnostic reporting (EVAL-024).
     Returns (error_category, snippet).
     """
     combined = f"{stdout}\n{stderr}"
 
-    if "No matching distribution found" in combined or "Could not find a version that satisfies" in combined:
+    if (
+        "No matching distribution found" in combined
+        or "Could not find a version that satisfies" in combined
+    ):
         return "MISSING_DEPENDENCY", "Unresolvable dependency or package version conflict."
     if "ModuleNotFoundError" in combined or "ImportError" in combined:
         return "MISSING_MODULE", "Required module not found during build."
@@ -122,9 +129,13 @@ async def execute_build(
     # Execute build command inside the quarantined container
     exec_result = await sandbox.execute(command, timeout_seconds=timeout_seconds)
 
-    success = (exec_result.exit_code == 0) and (not exec_result.timed_out) and (not exec_result.oom_killed)
+    success = (
+        (exec_result.exit_code == 0)
+        and (not exec_result.timed_out)
+        and (not exec_result.oom_killed)
+    )
 
-    artifacts: Dict[str, Any] = {
+    artifacts: dict[str, Any] = {
         "build_command": command,
         "timed_out": exec_result.timed_out,
         "oom_killed": exec_result.oom_killed,
@@ -132,7 +143,9 @@ async def execute_build(
     }
 
     if not success:
-        err_cat, err_hint = categorize_build_error(exec_result.stdout, exec_result.stderr, exec_result.exit_code)
+        err_cat, err_hint = categorize_build_error(
+            exec_result.stdout, exec_result.stderr, exec_result.exit_code
+        )
         artifacts["error_category"] = err_cat
         artifacts["error_diagnostic"] = err_hint
 

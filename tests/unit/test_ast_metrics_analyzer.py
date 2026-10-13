@@ -3,6 +3,7 @@ Unit tests for AST complexity and code maintainability analyzer.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.analyzers.ast_metrics import AstMetricsAnalyzer
@@ -15,7 +16,9 @@ def ast_analyzer() -> AstMetricsAnalyzer:
 
 
 @pytest.mark.asyncio
-async def test_detect_high_cyclomatic_complexity(tmp_path: Path, ast_analyzer: AstMetricsAnalyzer) -> None:
+async def test_detect_high_cyclomatic_complexity(
+    tmp_path: Path, ast_analyzer: AstMetricsAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     code = """
@@ -73,7 +76,9 @@ def many_args_func(p1, p2, p3, p4, p5, p6, p7, p8):
 
 
 @pytest.mark.asyncio
-async def test_handle_python_syntax_error_cleanly(tmp_path: Path, ast_analyzer: AstMetricsAnalyzer) -> None:
+async def test_handle_python_syntax_error_cleanly(
+    tmp_path: Path, ast_analyzer: AstMetricsAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     code = "def broken_func(:\n    invalid syntax here!"
@@ -87,7 +92,9 @@ async def test_handle_python_syntax_error_cleanly(tmp_path: Path, ast_analyzer: 
 
 
 @pytest.mark.asyncio
-async def test_clean_python_code_zero_findings(tmp_path: Path, ast_analyzer: AstMetricsAnalyzer) -> None:
+async def test_clean_python_code_zero_findings(
+    tmp_path: Path, ast_analyzer: AstMetricsAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     code = """

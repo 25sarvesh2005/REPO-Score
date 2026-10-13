@@ -5,14 +5,14 @@ and guarantees graceful shutdown and timeout recovery.
 """
 
 import asyncio
-from datetime import datetime, timezone
-import json
-import logging
-from typing import Any, Dict, Optional
+import contextlib
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 
+from backend.api.schemas.contracts import EvaluationStatus
 from backend.core.config import settings
 from backend.core.queue import IJobQueue, get_job_queue
 from backend.database.models import Evaluation
@@ -32,10 +32,10 @@ class EvaluationWorker:
 
     def __init__(
         self,
-        worker_id: Optional[str] = None,
-        job_queue: Optional[IJobQueue] = None,
-        orchestrator: Optional[EvaluationPipelineOrchestrator] = None,
-        session_factory: Optional[Any] = None,
+        worker_id: str | None = None,
+        job_queue: IJobQueue | None = None,
+        orchestrator: EvaluationPipelineOrchestrator | None = None,
+        session_factory: Any | None = None,
     ) -> None:
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.job_queue = job_queue or get_job_queue()
@@ -44,7 +44,7 @@ class EvaluationWorker:
         self._is_running = False
         self._stop_event = asyncio.Event()
 
-    async def process_job(self, payload: Dict[str, Any]) -> bool:
+    async def process_job(self, payload: dict[str, Any]) -> bool:
         """
         Process a single evaluation job payload.
         Returns True if successful, False if failed.
@@ -77,7 +77,9 @@ class EvaluationWorker:
                     await session.flush()
 
                 # Execute pipeline with timeout
-                timeout = float(options.get("timeout_seconds", settings.EVALUATION_DEFAULT_TIMEOUT_SECONDS))
+                timeout = float(
+                    options.get("timeout_seconds", settings.EVALUATION_DEFAULT_TIMEOUT_SECONDS)
+                )
                 result = await asyncio.wait_for(
                     self.orchestrator.execute_pipeline(
                         session=session,
@@ -93,25 +95,59 @@ class EvaluationWorker:
                     f"Worker [{self.worker_id}] finished evaluation {eval_id} "
                     f"with status {result.status.value} (score={result.overall_score}, grade={result.grade})"
                 )
+                await session.commit()
                 return True
 
-            except asyncio.TimeoutError:
-                logger.error(f"Worker [{self.worker_id}] evaluation {eval_id} exceeded timeout {timeout}s.")
+            except TimeoutError:
+                logger.error(
+                    f"Worker [{self.worker_id}] evaluation {eval_id} exceeded timeout {timeout}s."
+                )
                 if eval_rec:
-                    eval_rec.status = "TIMEOUT"
-                    eval_rec.error_summary = f"Evaluation job exceeded timeout limit of {timeout} seconds."
-                    eval_rec.completed_at = datetime.now(timezone.utc)
+                    eval_rec.status = EvaluationStatus.TIMEOUT
+                    eval_rec.error_summary = (
+                        f"Evaluation job exceeded timeout limit of {timeout} seconds."
+                    )
+                    eval_rec.completed_at = datetime.now(UTC)
                     await session.commit()
                 record_evaluation_metric("timeout", timeout)
                 try:
-                    await self.job_queue.send_to_dlq(eval_id, payload, reason=f"Timeout exceeded ({timeout}s)")
+                    await self.job_queue.send_to_dlq(
+                        eval_id, payload, reason=f"Timeout exceeded ({timeout}s)"
+                    )
                 except Exception as dlq_err:
                     logger.warning(f"Worker [{self.worker_id}] failed to route to DLQ: {dlq_err}")
                 return False
 
             except Exception as exc:
-                logger.error(f"Worker [{self.worker_id}] evaluation {eval_id} encountered fatal error: {exc}", exc_info=True)
+                logger.error(
+                    f"Worker [{self.worker_id}] evaluation {eval_id} encountered fatal error: {exc}",
+                    exc_info=True,
+                )
                 await session.rollback()
+                record_evaluation_metric("failed", 0.0)
+
+                # Persist terminal FAILED state to avoid leaving job permanently hung
+                try:
+                    async with self.session_factory() as err_session:
+                        fail_stmt = select(Evaluation).where(Evaluation.id == eval_id)
+                        fail_rec = (await err_session.execute(fail_stmt)).scalar_one_or_none()
+                        if fail_rec:
+                            fail_rec.status = EvaluationStatus.FAILED
+                            fail_rec.error_summary = f"Worker pipeline fatal error: {exc}"
+                            fail_rec.completed_at = datetime.now(UTC)
+                            await err_session.commit()
+                except Exception as db_err:
+                    logger.error(
+                        f"Worker [{self.worker_id}] failed to persist FAILED status: {db_err}"
+                    )
+
+                with contextlib.suppress(Exception):
+                    await self.job_queue.publish_event(
+                        eval_id,
+                        "evaluation.lifecycle.failed",
+                        {"status": "FAILED", "error": str(exc)},
+                    )
+
                 try:
                     await self.job_queue.send_to_dlq(eval_id, payload, reason=str(exc))
                 except Exception as dlq_err:
@@ -146,10 +182,8 @@ class EvaluationWorker:
                 processed = await self.run_once()
                 if processed:
                     continue
-                try:
+                with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(self._stop_event.wait(), timeout=poll_interval_seconds)
-                except asyncio.TimeoutError:
-                    pass
         finally:
             self._is_running = False
             logger.info(f"Worker [{self.worker_id}] stopped.")

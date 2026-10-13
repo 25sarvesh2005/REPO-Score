@@ -3,6 +3,8 @@ Unit tests for build strategy resolution and sandboxed execution.
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock
+
 import pytest
 
 from backend.repository.models import TechnologyDetectionResult
@@ -11,8 +13,7 @@ from backend.runtime.builder import (
     execute_build,
     resolve_build_command,
 )
-from backend.sandbox.mock import MockSandbox
-from backend.sandbox.models import SandboxConfig, SandboxExecutionResult
+from backend.sandbox.models import SandboxExecutionResult
 
 
 def test_resolve_build_command_python(tmp_path: Path):
@@ -27,7 +28,9 @@ def test_resolve_build_command_python(tmp_path: Path):
     tmp_path2.mkdir()
     (tmp_path2 / "pyproject.toml").write_text("[tool.poetry]\nname = 'test'\n")
     (tmp_path2 / "poetry.lock").write_text("")
-    det2 = TechnologyDetectionResult(primary_language="Python", detected_package_managers=["poetry"])
+    det2 = TechnologyDetectionResult(
+        primary_language="Python", detected_package_managers=["poetry"]
+    )
     cmd2 = resolve_build_command(tmp_path2, det2)
     assert cmd2 == ["poetry", "install", "--no-root"]
 
@@ -79,8 +82,10 @@ def test_categorize_build_error():
 async def test_execute_build_success(tmp_path: Path):
     (tmp_path / "requirements.txt").write_text("fastapi\n")
     det = TechnologyDetectionResult(primary_language="Python")
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
-    sbx = MockSandbox("sbx-1", cfg)
+    sbx = AsyncMock()
+    sbx.execute = AsyncMock(
+        return_value=SandboxExecutionResult(exit_code=0, stdout="build ok", stderr="")
+    )
 
     result = await execute_build(sbx, tmp_path, det)
     assert result.success is True
@@ -91,8 +96,7 @@ async def test_execute_build_success(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_execute_build_noop_for_unmanifested(tmp_path: Path):
     det = TechnologyDetectionResult(primary_language=None)
-    cfg = SandboxConfig(image="reposcore/sandbox-base:latest")
-    sbx = MockSandbox("sbx-2", cfg)
+    sbx = AsyncMock()
 
     result = await execute_build(sbx, tmp_path, det)
     assert result.success is True
@@ -103,9 +107,8 @@ async def test_execute_build_noop_for_unmanifested(tmp_path: Path):
 async def test_execute_build_failure(tmp_path: Path):
     (tmp_path / "requirements.txt").write_text("badpackage\n")
     det = TechnologyDetectionResult(primary_language="Python")
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def failing_handler(cmd):
+    def failing_handler(cmd, *args, **kwargs):
         return SandboxExecutionResult(
             exit_code=1,
             stdout="",
@@ -113,7 +116,8 @@ async def test_execute_build_failure(tmp_path: Path):
             duration_ms=100,
         )
 
-    sbx = MockSandbox("sbx-3", cfg, command_handler=failing_handler)
+    sbx = AsyncMock()
+    sbx.execute = AsyncMock(side_effect=failing_handler)
     result = await execute_build(sbx, tmp_path, det)
     assert result.success is False
     assert result.exit_code == 1

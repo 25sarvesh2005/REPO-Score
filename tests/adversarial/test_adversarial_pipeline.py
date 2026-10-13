@@ -3,26 +3,25 @@ Adversarial Tests: Manifest Corruption, Score Order Invariance, Worker Crash Rol
 Adheres strictly to Phase 14 specifications and AGENTS Prime Directives.
 """
 
-from datetime import datetime, timezone
+import random
+import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-import random
 from unittest.mock import AsyncMock, MagicMock
-import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.analyzers.dependency_scanner import DependencyVulnerabilityAnalyzer
-from backend.analyzers.models import FindingLocation, NormalizedFinding
+from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import (
     EvaluationStatus,
     EvidenceCategory,
-    LetterGrade,
     SeverityLevel,
 )
 from backend.core.queue import InMemoryJobQueue
-from backend.database.models import Evaluation, Repository, RepositorySnapshot
-from backend.pipeline.models import PipelineExecutionResult
+from backend.database.models import Evaluation, Repository
 from backend.pipeline.orchestrator import EvaluationPipelineOrchestrator
 from backend.pipeline.worker import EvaluationWorker
 from backend.scoring.calculator import DeterministicScoringEngine
@@ -52,6 +51,7 @@ def mock_db_session():
 # 1. Manifest Corruption & Dependency Analyzer Resilience
 # =========================================================================
 
+
 @pytest.mark.asyncio
 async def test_adversarial_malformed_package_json(tmp_path: Path):
     """
@@ -63,7 +63,9 @@ async def test_adversarial_malformed_package_json(tmp_path: Path):
     # Case A: Truncated JSON
     repo_a = tmp_path / "repo_a"
     repo_a.mkdir(parents=True, exist_ok=True)
-    (repo_a / "package.json").write_text('{"name": "broken", "dependencies": { "lodash": ', encoding="utf-8")
+    (repo_a / "package.json").write_text(
+        '{"name": "broken", "dependencies": { "lodash": ', encoding="utf-8"
+    )
 
     findings_a = await analyzer._execute_analysis(repo_a)
     assert findings_a == []
@@ -71,7 +73,9 @@ async def test_adversarial_malformed_package_json(tmp_path: Path):
     # Case B: Array instead of object in package.json
     repo_b = tmp_path / "repo_b"
     repo_b.mkdir(parents=True, exist_ok=True)
-    (repo_b / "package.json").write_text('["not", "a", "valid", "manifest", "object"]', encoding="utf-8")
+    (repo_b / "package.json").write_text(
+        '["not", "a", "valid", "manifest", "object"]', encoding="utf-8"
+    )
 
     findings_b = await analyzer._execute_analysis(repo_b)
     assert findings_b == []
@@ -112,6 +116,7 @@ async def test_adversarial_malformed_requirements_txt(tmp_path: Path):
 # 2. Score Order Invariance & Mathematical Determinism
 # =========================================================================
 
+
 def test_adversarial_score_order_invariance():
     """
     Verify Prime Directive #3 (Deterministic Core):
@@ -122,42 +127,46 @@ def test_adversarial_score_order_invariance():
     eval_id = uuid.uuid4()
 
     # Generate diverse findings across different categories & severities
-    base_findings = [
-        NormalizedFinding(
-            analyzer_id="dep-scanner",
-            tool_version="1.0.0",
-            rule_id=f"CVE-2024-{i:04d}",
-            category=EvidenceCategory.DEPENDENCY_HEALTH,
-            severity=SeverityLevel.HIGH if i % 2 == 0 else SeverityLevel.MEDIUM,
-            confidence=0.95,
-            title=f"Vulnerability {i}",
-            description="Sample CVE finding",
-        )
-        for i in range(1, 6)
-    ] + [
-        NormalizedFinding(
-            analyzer_id="ast-linter",
-            tool_version="1.0.0",
-            rule_id=f"PY-LINT-{j:03d}",
-            category=EvidenceCategory.MAINTAINABILITY,
-            severity=SeverityLevel.LOW if j % 2 == 0 else SeverityLevel.MEDIUM,
-            confidence=1.0,
-            title=f"Linter warning {j}",
-            description="Style or complexity issue",
-        )
-        for j in range(1, 8)
-    ] + [
-        NormalizedFinding(
-            analyzer_id="sec-scanner",
-            tool_version="1.0.0",
-            rule_id="SEC-INJECT-001",
-            category=EvidenceCategory.SECURITY,
-            severity=SeverityLevel.CRITICAL,
-            confidence=1.0,
-            title="Critical SQL Injection flaw",
-            description="Hardcoded SQL concatenation",
-        )
-    ]
+    base_findings = (
+        [
+            NormalizedFinding(
+                analyzer_id="dep-scanner",
+                tool_version="1.0.0",
+                rule_id=f"CVE-2024-{i:04d}",
+                category=EvidenceCategory.DEPENDENCY_HEALTH,
+                severity=SeverityLevel.HIGH if i % 2 == 0 else SeverityLevel.MEDIUM,
+                confidence=0.95,
+                title=f"Vulnerability {i}",
+                description="Sample CVE finding",
+            )
+            for i in range(1, 6)
+        ]
+        + [
+            NormalizedFinding(
+                analyzer_id="ast-linter",
+                tool_version="1.0.0",
+                rule_id=f"PY-LINT-{j:03d}",
+                category=EvidenceCategory.MAINTAINABILITY,
+                severity=SeverityLevel.LOW if j % 2 == 0 else SeverityLevel.MEDIUM,
+                confidence=1.0,
+                title=f"Linter warning {j}",
+                description="Style or complexity issue",
+            )
+            for j in range(1, 8)
+        ]
+        + [
+            NormalizedFinding(
+                analyzer_id="sec-scanner",
+                tool_version="1.0.0",
+                rule_id="SEC-INJECT-001",
+                category=EvidenceCategory.SECURITY,
+                severity=SeverityLevel.CRITICAL,
+                confidence=1.0,
+                title="Critical SQL Injection flaw",
+                description="Hardcoded SQL concatenation",
+            )
+        ]
+    )
 
     metadata = {
         "build_successful": True,
@@ -172,7 +181,9 @@ def test_adversarial_score_order_invariance():
     }
 
     # Baseline scorecard
-    baseline = scoring_engine.compute_scorecard(eval_id, list(base_findings), repo_metadata=metadata)
+    baseline = scoring_engine.compute_scorecard(
+        eval_id, list(base_findings), repo_metadata=metadata
+    )
 
     # Test reverse order and 10 pseudo-random permutations
     rng = random.Random(42)
@@ -230,6 +241,7 @@ def test_adversarial_partial_evidence_deterministic_penalty():
 # 3. Worker Exception Isolation & Transaction Rollback
 # =========================================================================
 
+
 @pytest.mark.asyncio
 async def test_adversarial_worker_unhandled_crash_rollback(mock_db_session):
     """
@@ -246,7 +258,7 @@ async def test_adversarial_worker_unhandled_crash_rollback(mock_db_session):
         status=EvaluationStatus.QUEUED,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     def _query(stmt):
@@ -306,12 +318,18 @@ async def test_adversarial_worker_malformed_payload_rejection():
     assert await worker.process_job({"repository_id": str(uuid.uuid4())}) is False
 
     # Corrupted non-UUID string
-    assert await worker.process_job({"evaluation_id": "not-a-valid-uuid", "repository_id": "also-not-a-uuid"}) is False
+    assert (
+        await worker.process_job(
+            {"evaluation_id": "not-a-valid-uuid", "repository_id": "also-not-a-uuid"}
+        )
+        is False
+    )
 
 
 # =========================================================================
 # 4. Mid-Pipeline Cancellation & Queue Idempotency
 # =========================================================================
+
 
 @pytest.mark.asyncio
 async def test_adversarial_mid_pipeline_cancellation(mock_db_session, tmp_path: Path):
@@ -330,7 +348,7 @@ async def test_adversarial_mid_pipeline_cancellation(mock_db_session, tmp_path: 
         status=EvaluationStatus.QUEUED,
         correlation_id=uuid.uuid4(),
         trigger_source="API",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     repository = Repository(
@@ -340,7 +358,7 @@ async def test_adversarial_mid_pipeline_cancellation(mock_db_session, tmp_path: 
         owner="org",
         name="repo",
         default_branch="main",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     def _query(stmt):

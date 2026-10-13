@@ -3,6 +3,7 @@ Entrypoint script for running RepoScore API via Uvicorn.
 """
 
 import uvicorn
+
 from backend.core.config import settings
 
 

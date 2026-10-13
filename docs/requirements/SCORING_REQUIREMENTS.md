@@ -3,8 +3,7 @@
 > **Document:** `SCORING_REQUIREMENTS.md`  
 > **System:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
 > **Status:** Active / Requirements Baseline  
-> **Phase:** Phase 01 — Requirements Engineering  
-> **Authority:** `phases/01_REQUIREMENTS.md`, `phases/00_ARCHITECTURE.md`, `AGENTS.md`
+> **Authority:** [`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md), [`AGENTS.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/AGENTS.md)
 
 ---
 

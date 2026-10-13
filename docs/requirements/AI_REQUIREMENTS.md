@@ -3,8 +3,7 @@
 > **Document:** `AI_REQUIREMENTS.md`  
 > **System:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
 > **Status:** Active / Requirements Baseline  
-> **Phase:** Phase 01 — Requirements Engineering  
-> **Authority:** `phases/01_REQUIREMENTS.md`, `phases/00_ARCHITECTURE.md`, `AGENTS.md`
+> **Authority:** [`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md), [`AGENTS.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/AGENTS.md)
 
 ---
 
@@ -67,16 +66,15 @@ graph TD
 ### AI-003: Pluggable `IAIProvider` Interface
 - **Priority:** P0
 - **Owner Component:** AI Subsystem (`backend.ai.core`)
-- **Description:** The AI engine MUST communicate through the typed `IAIProvider` Python protocol supporting three concrete implementations:
-  1. `LocalProvider`: Connects to local Ollama instance (default for local development and self-hosting).
-  2. `MockProvider`: Returns deterministic, static responses for fast unit tests and headless CI pipelines.
-  3. `ExternalProvider`: Optional integration with third-party LLM APIs (e.g., Anthropic, OpenAI).
+- **Description:** The AI engine MUST communicate through the typed `IAIProvider` Python protocol supporting concrete implementations:
+  1. `LocalProvider`: Connects to local Ollama or vLLM instance (default for self-hosting and privacy).
+  2. `ExternalProvider`: Optional integration with third-party LLM APIs (e.g., Anthropic, OpenAI, Gemini).
 - **Acceptance Criteria:**
   ```gherkin
-  Given the system is configured with AI_PROVIDER=mock
+  Given the system is configured with AI_PROVIDER=local
   When an evaluation triggers AI interpretation
-  Then the MockProvider must return pre-defined structured responses
-  And zero network requests to external AI APIs or Ollama may be initiated
+  Then the LocalProvider interacts with the locally-hosted model endpoint
+  And if the provider is offline or unreachable, evaluation gracefully degrades without failure
   ```
 
 ### AI-004: Zero Mandatory Paid Cloud Dependencies (Local Ollama Default)

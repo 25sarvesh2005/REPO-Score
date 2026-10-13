@@ -51,7 +51,9 @@ class SandboxTimeoutError(SandboxError):
 class SandboxOOMError(SandboxError):
     """Raised when container process is terminated by the kernel Out-Of-Memory killer."""
 
-    def __init__(self, detail: str = "Sandbox process terminated due to memory quota exhaustion (OOM).") -> None:
+    def __init__(
+        self, detail: str = "Sandbox process terminated due to memory quota exhaustion (OOM)."
+    ) -> None:
         super().__init__(
             detail=detail,
             title="Sandbox Out-Of-Memory",
@@ -66,7 +68,10 @@ class SandboxUnavailableError(SandboxError):
     CRITICAL: Untrusted repository code MUST NEVER fall back to host execution!
     """
 
-    def __init__(self, detail: str = "Container execution runtime is unavailable. Host execution fallback is strictly prohibited.") -> None:
+    def __init__(
+        self,
+        detail: str = "Container execution runtime is unavailable. Host execution fallback is strictly prohibited.",
+    ) -> None:
         super().__init__(
             detail=detail,
             title="Sandbox Runtime Unavailable",

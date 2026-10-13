@@ -2,8 +2,9 @@
 Domain exceptions and RFC 7807 Problem Details exception handlers.
 """
 
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -87,7 +88,7 @@ def build_problem_payload(
         "detail": detail,
         "instance": instance,
         "correlation_id": corr_id,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "invalid_params": invalid_params or [],
     }
     return payload
@@ -97,7 +98,9 @@ def register_error_handlers(app: FastAPI) -> None:
     """Register RFC 7807 error handlers on the FastAPI application."""
 
     @app.exception_handler(RepoScoreException)
-    async def reposcore_exception_handler(request: Request, exc: RepoScoreException) -> JSONResponse:
+    async def reposcore_exception_handler(
+        request: Request, exc: RepoScoreException
+    ) -> JSONResponse:
         logger.warning(f"Domain exception on {request.url.path}: {exc.detail}")
         payload = build_problem_payload(
             status_code=exc.status_code,
@@ -113,7 +116,9 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         logger.info(f"Schema validation error on {request.url.path}")
         invalid_params = []
         for err in exc.errors():

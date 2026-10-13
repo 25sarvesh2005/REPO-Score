@@ -3,15 +3,17 @@ Integration tests for score reproducibility, golden tests, and persistence.
 Adheres strictly to SCORE-008, SCORE-009, and SCORE-024.
 """
 
-from decimal import Decimal
 import uuid
+
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.analyzers.models import NormalizedFinding
-from backend.api.schemas.contracts import EvidenceCategory, LetterGrade, SeverityLevel
-from backend.database.base import Base
-from backend.database.models import Evaluation, Repository, RepositorySnapshot, Score, ScoreDimension
+from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
+from backend.database.models import (
+    Score,
+    ScoreDimension,
+)
 from backend.scoring.calculator import DeterministicScoringEngine
 
 

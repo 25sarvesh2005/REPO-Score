@@ -3,7 +3,8 @@ Integration tests for AnalyzerRegistry concurrent execution, filtering, and fail
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import pytest
 
 from backend.analyzers.interface import BaseAnalyzer
@@ -13,7 +14,7 @@ from backend.analyzers.models import (
     NormalizedFinding,
 )
 from backend.analyzers.registry import AnalyzerRegistry
-from backend.api.schemas.contracts import EvidenceCategory, SeverityLevel
+from backend.api.schemas.contracts import SeverityLevel
 
 
 class CrashingDummyAnalyzer(BaseAnalyzer):
@@ -29,14 +30,14 @@ class CrashingDummyAnalyzer(BaseAnalyzer):
             target_languages=["*"],
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         return True
 
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
         raise RuntimeError("Simulated internal analyzer crash!")
 
 
@@ -56,15 +57,16 @@ class TimeoutDummyAnalyzer(BaseAnalyzer):
             target_languages=["*"],
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         return True
 
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
         import asyncio
+
         await asyncio.sleep(2)  # Exceeds 1s timeout
         return []
 
@@ -117,8 +119,8 @@ async def test_analyzer_registry_concurrent_execution(test_repo_fixture: Path) -
 
     rule_ids = {f.rule_id for f in findings}
     assert "SEC-002-AWS-KEY" in rule_ids  # from secret scanner
-    assert "CVE-2023-32681" in rule_ids   # from dependency scanner
-    assert "PY-SEC-EVAL-EXEC" in rule_ids # from python security linter
+    assert "CVE-2023-32681" in rule_ids  # from dependency scanner
+    assert "PY-SEC-EVAL-EXEC" in rule_ids  # from python security linter
 
 
 @pytest.mark.asyncio

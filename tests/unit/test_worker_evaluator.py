@@ -3,13 +3,13 @@ Unit tests for WorkerEvaluator.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.models import EvaluatorType, RuntimeFailureCode
 from backend.runtime.worker_evaluator import WorkerEvaluator
-from backend.sandbox.mock import MockSandbox
-from backend.sandbox.models import SandboxConfig, SandboxExecutionResult
+from backend.sandbox.models import SandboxExecutionResult
 
 
 def test_worker_evaluator_can_evaluate():
@@ -24,15 +24,14 @@ def test_worker_evaluator_can_evaluate():
 
 
 @pytest.mark.asyncio
-async def test_worker_evaluator_stability(tmp_path: Path):
+async def test_worker_evaluator_stability(tmp_path: Path, make_mock_sandbox):
     (tmp_path / "worker.py").write_text("import time\nprint('starting worker: ready')\n")
     det = TechnologyDetectionResult(
         primary_language="Python",
         evaluator_category=EvaluatorCategory.BACKGROUND_WORKER,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def worker_handler(cmd):
+    def worker_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "worker.py" in cmd_str:
             return SandboxExecutionResult(
@@ -44,7 +43,7 @@ async def test_worker_evaluator_stability(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="ok", stderr="")
 
-    sbx = MockSandbox("sbx-worker-1", cfg, command_handler=worker_handler)
+    sbx = make_mock_sandbox(worker_handler)
     ev = WorkerEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det, context={"evaluation_id": "test-worker"})
 
@@ -57,15 +56,14 @@ async def test_worker_evaluator_stability(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_worker_evaluator_premature_crash(tmp_path: Path):
+async def test_worker_evaluator_premature_crash(tmp_path: Path, make_mock_sandbox):
     (tmp_path / "worker.py").write_text("raise RuntimeError('broker unreachable')\n")
     det = TechnologyDetectionResult(
         primary_language="Python",
         evaluator_category=EvaluatorCategory.BACKGROUND_WORKER,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def crash_handler(cmd):
+    def crash_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "worker.py" in cmd_str:
             return SandboxExecutionResult(
@@ -77,7 +75,7 @@ async def test_worker_evaluator_premature_crash(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="ok", stderr="")
 
-    sbx = MockSandbox("sbx-worker-crash", cfg, command_handler=crash_handler)
+    sbx = make_mock_sandbox(crash_handler)
     ev = WorkerEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det)
 

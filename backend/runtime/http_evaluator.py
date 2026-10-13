@@ -5,17 +5,15 @@ Executes startup bootstrapping, loopback readiness probing, synthetic load testi
 """
 
 import json
-from pathlib import Path
-import re
 import time
-from typing import Any, Dict, List, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.builder import execute_build
 from backend.runtime.interface import BaseRuntimeEvaluator
 from backend.runtime.models import (
-    BuildResult,
     EvaluatorType,
     HttpMetrics,
     ResourceMetrics,
@@ -51,7 +49,7 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
 
     def resolve_startup_command(
         self, snapshot_path: Path, detection: TechnologyDetectionResult, port: int = 8000
-    ) -> List[str]:
+    ) -> list[str]:
         """Resolve sandboxed startup command based on detected frameworks and entrypoints."""
         primary = detection.primary_language or ""
         frameworks = detection.detected_frameworks
@@ -102,21 +100,21 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
         sandbox: ISandbox,
         snapshot_path: Path,
         detection: TechnologyDetectionResult,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RuntimeObservation:
         ctx = context or {}
         evaluation_id = ctx.get("evaluation_id", str(uuid.uuid4()))
         port = ctx.get("port", 8000)
         start_time = time.monotonic()
 
-        unhandled_exceptions: List[str] = []
-        critical_logs: List[str] = []
+        unhandled_exceptions: list[str] = []
+        critical_logs: list[str] = []
 
         # Step 1: Sandboxed Build Execution (EVAL-021)
         build_result = await execute_build(sandbox, snapshot_path, detection)
         if not build_result.success:
             duration_ms = int((time.monotonic() - start_time) * 1000)
-            failure_code = (
+            build_failure_code = (
                 RuntimeFailureCode.OOM_KILLED
                 if build_result.oom_killed
                 else RuntimeFailureCode.BUILD_FAILURE
@@ -127,14 +125,14 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
                 primary_language=detection.primary_language,
                 build_result=build_result,
                 duration_ms=duration_ms,
-                failure_code=failure_code,
+                failure_code=build_failure_code,
                 failure_reason=f"Build failed with exit code {build_result.exit_code}",
                 raw_stdout=build_result.stdout,
                 raw_stderr=build_result.stderr,
             )
 
         # Step 2: Application Bootstrapping & Readiness Probing (EVAL-025, EVAL-026)
-        startup_cmd = self.resolve_startup_command(snapshot_path, detection, port=port)
+        _startup_cmd = self.resolve_startup_command(snapshot_path, detection, port=port)
         startup_t0 = time.monotonic()
 
         # Execute loopback probe script inside container
@@ -161,15 +159,13 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
         startup_duration_ms = int((time.monotonic() - startup_t0) * 1000)
 
         ready = False
-        ready_endpoint: Optional[str] = None
+        ready_endpoint: str | None = None
         startup_stdout = probe_result.stdout
         startup_stderr = probe_result.stderr
 
         # Check for unhandled traceback in output
         if "Traceback (most recent call last)" in (startup_stdout + startup_stderr):
-            unhandled_exceptions.append(
-                (startup_stderr or startup_stdout).strip()[-500:]
-            )
+            unhandled_exceptions.append((startup_stderr or startup_stdout).strip()[-500:])
 
         # Parse probe JSON result
         try:
@@ -182,12 +178,10 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
         except Exception:
             ready = False
 
-        # In mock or fallback scenarios where probe simulated success
-        if not ready and probe_result.exit_code == 0 and "Mock execution succeeded" in probe_result.stdout:
-            ready = True
-            ready_endpoint = "/health"
-
         startup_success = ready and (not probe_result.timed_out) and (not probe_result.oom_killed)
+
+        failure_code: RuntimeFailureCode | None = None
+        failure_msg: str | None = None
 
         if probe_result.oom_killed:
             failure_code = RuntimeFailureCode.OOM_KILLED
@@ -197,10 +191,9 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
             failure_msg = "Application startup timed out after 30s without responding"
         elif not startup_success:
             failure_code = RuntimeFailureCode.CRASH_ON_BOOT
-            failure_msg = f"Application failed to respond on port {port}. Exit code: {probe_result.exit_code}"
-        else:
-            failure_code = None
-            failure_msg = None
+            failure_msg = (
+                f"Application failed to respond on port {port}. Exit code: {probe_result.exit_code}"
+            )
 
         startup_result = StartupResult(
             success=startup_success,
@@ -269,13 +262,13 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
 
         load_result = await sandbox.execute(load_cmd, timeout_seconds=30)
         http_metrics = HttpMetrics(
-            total_requests=50,
-            successful_requests=50,
+            total_requests=0,
+            successful_requests=0,
             error_5xx_requests=0,
             error_4xx_requests=0,
-            latency_p50_ms=4.5,
-            latency_p95_ms=12.2,
-            latency_p99_ms=18.0,
+            latency_p50_ms=0.0,
+            latency_p95_ms=0.0,
+            latency_p99_ms=0.0,
             endpoints_tested=[target_path],
         )
 
@@ -284,7 +277,7 @@ class HttpApiEvaluator(BaseRuntimeEvaluator):
                 if line.strip().startswith("{") and "p50_ms" in line:
                     data = json.loads(line.strip())
                     http_metrics = HttpMetrics(
-                        total_requests=data.get("total", 50),
+                        total_requests=data.get("total", 0),
                         successful_requests=data.get("successful", 0),
                         error_5xx_requests=data.get("error_5xx", 0),
                         error_4xx_requests=data.get("error_4xx", 0),

@@ -206,29 +206,33 @@ python scripts/ci_regression_checker.py --base-sha HEAD~1 --head-sha HEAD
 
 ---
 
-## 📜 Phase Documentation & Governance
+## 📚 Documentation & Specifications
 
-The development of RepoScore followed strict agent governance ([`AGENTS.md`](AGENTS.md)) across 19 sequential phases:
+Detailed engineering specifications and architecture designs are maintained in the [`docs/`](docs/) directory:
 
-- [`Phase 00 — System Architecture`](docs/phase-reports/PHASE_00.md)
-- [`Phase 01 — Software Requirements`](docs/phase-reports/PHASE_01.md)
-- [`Phase 02 — Security Threat Model`](docs/phase-reports/PHASE_02.md)
-- [`Phase 03 — Persistence Data Model`](docs/phase-reports/PHASE_03.md)
-- [`Phase 04 — Versioned API Contracts`](docs/phase-reports/PHASE_04.md)
-- [`Phase 05 — Application Foundation`](docs/phase-reports/PHASE_05.md)
-- [`Phase 06 — Repository Ingestion`](docs/phase-reports/PHASE_06.md)
-- [`Phase 07 — Isolated Execution Sandbox`](docs/phase-reports/PHASE_07.md)
-- [`Phase 08 — Static Analysis Adapters`](docs/phase-reports/PHASE_08.md)
-- [`Phase 09 — Runtime Evaluation Engine`](docs/phase-reports/PHASE_09.md)
-- [`Phase 10 — Deterministic Scoring`](docs/phase-reports/PHASE_10.md)
-- [`Phase 11 — AI Interpretation Engine`](docs/phase-reports/PHASE_11.md)
-- [`Phase 12 — Evaluation Dashboard`](docs/phase-reports/PHASE_12.md)
-- [`Phase 13 — Evaluation Pipeline Integration`](docs/phase-reports/PHASE_13.md)
-- [`Phase 14 — Adversarial Testing`](docs/phase-reports/PHASE_14.md)
-- [`Phase 15 — CI/CD & Regression Workflows`](docs/phase-reports/PHASE_15.md)
-- [`Phase 16 — Observability & Diagnostics`](docs/phase-reports/PHASE_16.md)
-- [`Phase 17 — Hardening & Reliability`](docs/phase-reports/PHASE_17.md)
-- [`Phase 18 — Final Acceptance & Release Audit`](docs/phase-reports/PHASE_18.md)
+- **System Architecture:**
+  - [System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)
+  - [Component Architecture & Interfaces](docs/architecture/COMPONENT_ARCHITECTURE.md)
+  - [Isolated Execution Sandbox Architecture](docs/architecture/SANDBOX_ARCHITECTURE.md)
+  - [Deterministic Scoring Engine Architecture](docs/architecture/SCORING_ARCHITECTURE.md)
+  - [Data Flow & Lifecycle Pipeline](docs/architecture/DATA_FLOW.md)
+  - [Architecture Decision Records (ADRs)](docs/architecture/adrs/)
+- **Security & Sandboxing:**
+  - [Threat Model & Attack Surface](docs/security/THREAT_MODEL.md)
+  - [Sandbox Hardening & Security Specification](docs/security/SANDBOX_SECURITY_SPEC.md)
+  - [Prompt Injection Defense](docs/security/PROMPT_INJECTION_DEFENSE.md)
+- **API Contracts & Integrations:**
+  - [OpenAPI 3.1 Specification](docs/api/OPENAPI_SPEC.yaml)
+  - [REST API Endpoint Catalog](docs/api/ENDPOINT_CATALOG.md)
+  - [Server-Sent Events (SSE) Spec](docs/api/EVENT_STREAM_SPEC.md)
+- **Data Model & Storage:**
+  - [PostgreSQL Schema & Indexing Spec](docs/data-model/POSTGRES_SCHEMA_SPEC.md)
+  - [Entity Relationship Architecture](docs/data-model/ENTITY_RELATIONSHIP_MODEL.md)
+  - [Migration Strategy](docs/data-model/MIGRATION_STRATEGY.md)
+- **Requirements & Verification:**
+  - [Software Requirements Specification (SRS)](docs/requirements/SRS.md)
+  - [Functional Requirements](docs/requirements/FUNCTIONAL_REQUIREMENTS.md)
+  - [Requirements Traceability Matrix](docs/requirements/TRACEABILITY_MATRIX.md)
 
 ---
 

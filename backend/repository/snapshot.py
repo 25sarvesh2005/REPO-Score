@@ -4,10 +4,9 @@ Snapshot storage management, path traversal defense, resource limit enforcement,
 
 import hashlib
 import os
-from pathlib import Path, PurePosixPath
 import shutil
 import stat
-from typing import List, Optional, Tuple
+from pathlib import Path, PurePosixPath
 
 from backend.api.errors import RepoScoreException
 from backend.core.config import settings
@@ -62,7 +61,7 @@ def compute_file_sha256(filepath: Path) -> str:
     return hasher.hexdigest()
 
 
-def compute_deterministic_tree_hash(entries: List[FileManifestEntry]) -> str:
+def compute_deterministic_tree_hash(entries: list[FileManifestEntry]) -> str:
     """
     Compute a deterministic tree hash from sorted file entries.
     Invariance guarantee: Sorted by canonical POSIX relative path.
@@ -79,12 +78,12 @@ def compute_deterministic_tree_hash(entries: List[FileManifestEntry]) -> str:
 def build_snapshot_manifest(
     snapshot_dir: Path,
     commit_sha: str,
-    max_size_bytes: Optional[int] = None,
-    max_file_count: Optional[int] = None,
+    max_size_bytes: int | None = None,
+    max_file_count: int | None = None,
 ) -> SnapshotManifest:
     """
     Inspect all files in snapshot_dir, enforcing security isolation and resource quotas.
-    
+
     Security controls:
     - Path traversal prevention: ensures all files resolve inside snapshot_dir.
     - Symlink breakout neutralization: skips or rejects symlinks escaping snapshot root.
@@ -94,7 +93,7 @@ def build_snapshot_manifest(
     effective_max_files = max_file_count or settings.MAX_REPO_FILE_COUNT
 
     resolved_root = snapshot_dir.resolve()
-    entries: List[FileManifestEntry] = []
+    entries: list[FileManifestEntry] = []
     total_bytes = 0
     total_files = 0
 
@@ -149,7 +148,7 @@ def build_snapshot_manifest(
             try:
                 stat_result = file_path.stat()
                 file_size = stat_result.st_size
-            except OSError as exc:
+            except OSError:
                 # File inaccessible or deleted
                 continue
 

@@ -7,7 +7,8 @@ Used ONLY when the user explicitly provides an external API key.
 import json
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any
+
 import httpx
 from pydantic import ValidationError
 
@@ -22,7 +23,7 @@ class ExternalProvider(IAIProvider):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         base_url: str = "https://api.openai.com/v1",
         model_name: str = "gpt-4o-mini",
         temperature: float = 0.1,
@@ -71,7 +72,7 @@ class ExternalProvider(IAIProvider):
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model_name,
             "messages": [
                 {"role": "system", "content": system_instruction},

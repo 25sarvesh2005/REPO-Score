@@ -4,10 +4,9 @@ Protects RepoScore API gateway from denial-of-service and abuse.
 Adheres strictly to RFC 7807 (Problem Details for HTTP APIs) and Phase 17 security standards.
 """
 
-from collections import defaultdict
-from datetime import datetime, timezone
 import time
-from typing import Dict, List
+from collections import defaultdict
+
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -38,7 +37,7 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.limit = requests_per_minute
         self.window_seconds = 60.0
-        self._clients: Dict[str, List[float]] = defaultdict(list)
+        self._clients: dict[str, list[float]] = defaultdict(list)
 
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP, considering X-Forwarded-For if behind a reverse proxy."""

@@ -3,6 +3,7 @@ Unit tests for cryptographic secret and credential scanner adapter.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.analyzers.secret_scanner import SecretScannerAnalyzer
@@ -15,7 +16,9 @@ def scanner() -> SecretScannerAnalyzer:
 
 
 @pytest.mark.asyncio
-async def test_detect_hardcoded_github_token(tmp_path: Path, scanner: SecretScannerAnalyzer) -> None:
+async def test_detect_hardcoded_github_token(
+    tmp_path: Path, scanner: SecretScannerAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "config.py").write_text(
@@ -69,7 +72,9 @@ async def test_detect_database_credentials(tmp_path: Path, scanner: SecretScanne
 
 
 @pytest.mark.asyncio
-async def test_clean_files_zero_secret_findings(tmp_path: Path, scanner: SecretScannerAnalyzer) -> None:
+async def test_clean_files_zero_secret_findings(
+    tmp_path: Path, scanner: SecretScannerAnalyzer
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "clean.py").write_text(

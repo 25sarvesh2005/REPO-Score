@@ -4,6 +4,7 @@ Adheres strictly to Phase 12 validation requirements.
 """
 
 from fastapi.testclient import TestClient
+
 from backend.api.app import create_app
 
 client = TestClient(create_app())

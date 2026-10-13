@@ -11,7 +11,6 @@ from backend.sandbox.exceptions import (
     SandboxUnavailableError,
 )
 from backend.sandbox.interface import ISandbox, ISandboxManager
-from backend.sandbox.mock import MockSandbox, MockSandboxManager
 from backend.sandbox.models import (
     NetworkPolicy,
     SandboxConfig,
@@ -34,8 +33,6 @@ __all__ = [
     "DockerSandboxManager",
     "ISandbox",
     "ISandboxManager",
-    "MockSandbox",
-    "MockSandboxManager",
     "NetworkPolicy",
     "SandboxConfig",
     "SandboxError",

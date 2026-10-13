@@ -3,8 +3,7 @@
 > **Document:** `THREAT_MODEL.md`  
 > **System:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
 > **Status:** Active / Security Baseline  
-> **Phase:** Phase 02 — Threat Model and Sandbox Security Specification  
-> **Authority:** `phases/02_SECURITY.md`, `phases/00_ARCHITECTURE.md`, `AGENTS.md`
+> **Authority:** [`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md), [`AGENTS.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/AGENTS.md)
 
 ---
 

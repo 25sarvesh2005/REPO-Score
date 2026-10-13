@@ -4,13 +4,13 @@ Adheres strictly to SCORING_ARCHITECTURE.md, ADR-003, ADR-004, and SCORE-001 thr
 Consumes normalized evidence ONLY; zero AI involvement.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, List, Optional
-from uuid import UUID, uuid5, NAMESPACE_DNS
+from decimal import Decimal
+from typing import Any
+from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.schemas.contracts import EvidenceCategory, LetterGrade
+from backend.api.schemas.contracts import EvidenceCategory
 from backend.database.models import Score, ScoreDimension
 from backend.scoring.models import (
     DimensionScoreResult,
@@ -42,21 +42,21 @@ class DeterministicScoringEngine:
     def compute_scorecard(
         self,
         evaluation_id: UUID,
-        evidence_records: List[Any],
-        repo_metadata: Optional[Dict[str, Any]] = None,
-        partial_status: Optional[str] = None,
+        evidence_records: list[Any],
+        repo_metadata: dict[str, Any] | None = None,
+        partial_status: str | None = None,
     ) -> ScorecardResult:
         """
         Execute deterministic scoring algorithm over evidence records.
         """
         metadata = repo_metadata or {}
-        dim_results: Dict[str, DimensionScoreResult] = {}
+        dim_results: dict[str, DimensionScoreResult] = {}
 
         # 1. Initialize all 10 dimensions with baseline 100.0 (SCORE-001, SCORE-002)
-        dim_deductions: Dict[EvidenceCategory, List[ReceiptItem]] = {
+        dim_deductions: dict[EvidenceCategory, list[ReceiptItem]] = {
             cat: [] for cat in EvidenceCategory
         }
-        dim_credits: Dict[EvidenceCategory, List[ReceiptItem]] = {
+        dim_credits: dict[EvidenceCategory, list[ReceiptItem]] = {
             cat: [] for cat in EvidenceCategory
         }
 
@@ -178,10 +178,10 @@ class DeterministicScoringEngine:
 
         for category, spec in DIMENSION_SPECIFICATIONS.items():
             deductions = dim_deductions[category]
-            credits = dim_credits[category]
+            category_credits = dim_credits[category]
 
             dim_ded_sum = sum((abs(item.calculated_delta) for item in deductions), Decimal("0.0"))
-            dim_cred_sum = sum((item.calculated_delta for item in credits), Decimal("0.0"))
+            dim_cred_sum = sum((item.calculated_delta for item in category_credits), Decimal("0.0"))
 
             total_all_deductions += dim_ded_sum
             total_all_credits += dim_cred_sum
@@ -208,7 +208,9 @@ class DeterministicScoringEngine:
                     )
                     deductions.append(incomplete_ded)
                     dim_ded_sum += Decimal("25.0")
-                    final_dim_score = max(Decimal("0.0"), round_points(final_dim_score - Decimal("25.0")))
+                    final_dim_score = max(
+                        Decimal("0.0"), round_points(final_dim_score - Decimal("25.0"))
+                    )
 
             dim_results[category.value] = DimensionScoreResult(
                 dimension_name=spec.name,
@@ -217,7 +219,7 @@ class DeterministicScoringEngine:
                 base_score=Decimal("100.0"),
                 score=final_dim_score,
                 status=status,
-                receipt=deductions + credits,
+                receipt=deductions + category_credits,
                 total_deductions=round_points(dim_ded_sum),
                 total_credits=round_points(dim_cred_sum),
             )

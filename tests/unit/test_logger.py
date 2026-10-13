@@ -4,6 +4,7 @@ Unit tests for structured logging and secret redaction.
 
 import json
 import logging
+
 from backend.observability.logger import (
     StructuredJSONFormatter,
     correlation_id_ctx,

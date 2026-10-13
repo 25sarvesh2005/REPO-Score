@@ -3,17 +3,23 @@ Integration tests for AIInterpretationService, graceful fallback, and database p
 Adheres strictly to AI-002, AI-007, AI-009, and AI-010.
 """
 
+import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock
-import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.ai.models import (
+    AIAnalysisPayload,
+    AIAnalysisResult,
+    AIRecommendationItem,
+    RecommendationPriority,
+)
+from backend.ai.provider import IAIProvider
+from backend.ai.service import AIInterpretationService
 from backend.analyzers.models import NormalizedFinding
 from backend.api.schemas.contracts import EvidenceCategory, LetterGrade, SeverityLevel
-from backend.ai.mock_provider import MockProvider
-from backend.ai.models import AIAnalysisPayload, AIRecommendationItem, RecommendationPriority
-from backend.ai.service import AIInterpretationService
 from backend.database.models import AIAnalysis, Recommendation
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.scoring.models import DimensionScoreResult, ScorecardResult
@@ -75,7 +81,35 @@ def sample_evidence():
 
 @pytest.mark.asyncio
 async def test_ai_service_interpretation_success(sample_scorecard, sample_evidence):
-    provider = MockProvider(model_name="mock-llama3.2")
+    provider = AsyncMock(spec=IAIProvider)
+    provider.provider_name = "ollama"
+    provider.model_name = "llama3.2:3b"
+    provider.is_available = AsyncMock(return_value=True)
+    payload = AIAnalysisPayload(
+        executive_summary="The repository is well-structured with modular architecture and passing tests across components.",
+        architectural_assessment="Clean architectural layer separation with clear boundaries and loose coupling.",
+        security_risk_narrative="Zero critical vulnerabilities detected.",
+        top_strengths=["Passing tests", "Type safety"],
+        critical_risks=["Pin dependencies"],
+        recommendations=[
+            AIRecommendationItem(
+                title="Lock dependencies",
+                category="DEPENDENCY_HEALTH",
+                priority=RecommendationPriority.LOW,
+                explanation="Pinning guarantees reproducible builds.",
+                actionable_steps=["Pin versions"],
+                related_evidence_ids=[uuid.uuid4()],
+            )
+        ],
+    )
+    provider.generate_analysis = AsyncMock(
+        return_value=AIAnalysisResult(
+            payload=payload,
+            provider="ollama",
+            model_name="llama3.2:3b",
+            success=True,
+        )
+    )
     service = AIInterpretationService(provider=provider)
 
     det = TechnologyDetectionResult(
@@ -92,8 +126,8 @@ async def test_ai_service_interpretation_success(sample_scorecard, sample_eviden
 
     assert result.success is True
     assert result.is_fallback is False
-    assert result.provider == "mock"
-    assert result.model_name == "mock-llama3.2"
+    assert result.provider == "ollama"
+    assert result.model_name == "llama3.2:3b"
     assert len(result.payload.executive_summary) > 50
     assert len(result.payload.architectural_assessment) > 30
     assert len(result.payload.recommendations) > 0
@@ -105,16 +139,18 @@ async def test_ai_service_interpretation_success(sample_scorecard, sample_eviden
 
 @pytest.mark.asyncio
 async def test_ai_service_graceful_degradation_on_failure(sample_scorecard, sample_evidence):
-    # Provider configured to simulate failure
-    failing_provider = MockProvider(available=False)
-    failing_provider._custom_handler = lambda p, s: MockProvider()._payload_override or (
-        __import__("backend.ai.models", fromlist=["AIAnalysisResult"]).AIAnalysisResult(
+    failing_provider = AsyncMock(spec=IAIProvider)
+    failing_provider.provider_name = "ollama"
+    failing_provider.model_name = "llama3.2:3b"
+    failing_provider.is_available = AsyncMock(return_value=False)
+    failing_provider.generate_analysis = AsyncMock(
+        return_value=AIAnalysisResult(
             payload=AIAnalysisPayload(
                 executive_summary="Failed",
                 architectural_assessment="Failed",
             ),
-            provider="mock",
-            model_name="mock-engine",
+            provider="ollama",
+            model_name="llama3.2:3b",
             success=False,
             error_message="Connection to Ollama refused",
             is_fallback=True,
@@ -138,7 +174,22 @@ async def test_ai_service_graceful_degradation_on_failure(sample_scorecard, samp
 
 @pytest.mark.asyncio
 async def test_ai_service_persistence(sample_scorecard):
-    service = AIInterpretationService(provider=MockProvider())
+    provider = AsyncMock(spec=IAIProvider)
+    provider.provider_name = "ollama"
+    provider.model_name = "llama3.2:3b"
+    provider.is_available = AsyncMock(return_value=True)
+    provider.generate_analysis = AsyncMock(
+        return_value=AIAnalysisResult(
+            payload=AIAnalysisPayload(
+                executive_summary="Executive summary for persistence test.",
+                architectural_assessment="Architectural assessment for persistence.",
+            ),
+            provider="ollama",
+            model_name="llama3.2:3b",
+            success=True,
+        )
+    )
+    service = AIInterpretationService(provider=provider)
     result = await service.interpret_evaluation(
         scorecard=sample_scorecard,
         evidence_records=[],
@@ -156,7 +207,7 @@ async def test_ai_service_persistence(sample_scorecard):
     )
 
     assert analysis_db.evaluation_id == sample_scorecard.evaluation_id
-    assert analysis_db.provider == "mock"
+    assert analysis_db.provider == "ollama"
     assert analysis_db.executive_summary == result.payload.executive_summary
 
     analyses_added = [e for e in added_entities if isinstance(e, AIAnalysis)]

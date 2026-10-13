@@ -26,12 +26,10 @@ graph TD
         SystemPrompt --> ProviderSelect{AI Provider Router}
         ProviderSelect --> LocalAI["LocalProvider (Default: Ollama / vLLM)"]
         ProviderSelect --> ExtAI["ExternalProvider (Optional: OpenAI / Gemini)"]
-        ProviderSelect --> MockAI["MockProvider (Unit Tests & Offline CI)"]
     end
 
     LocalAI --> ResponseStream[Raw LLM JSON Stream]
     ExtAI --> ResponseStream
-    MockAI --> ResponseStream
 
     subgraph ValidationLayer ["Output Enforcement & Guardrails"]
         ResponseStream --> PydanticValidator[Pydantic Schema Validator]
@@ -86,7 +84,6 @@ class IAIProvider(ABC):
 ### Concrete Provider Implementations:
 - **`LocalProvider` (Default / Free-First)**: Interacts with an Ollama instance or local vLLM server via HTTP REST API (`http://localhost:11434/api/generate`). Uses lightweight open weights (e.g., `llama3.2:3b`, `mistral:7b`, `qwen2.5-coder:7b`). Zero API subscription costs.
 - **`ExternalProvider` (Optional)**: Connects to external OpenAI-compatible endpoints (OpenAI, Gemini, Anthropic) if an API key is explicitly configured by the user.
-- **`MockProvider` (Testing & CI)**: Emits deterministic, schema-compliant fixture data in test environments without requiring any running LLM.
 
 ---
 

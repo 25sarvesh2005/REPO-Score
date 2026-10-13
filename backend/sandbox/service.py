@@ -2,15 +2,13 @@
 Sandbox orchestration service and standard configuration builders.
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Dict, Optional
-import uuid
 
 from backend.core.config import settings
 from backend.sandbox.docker import DockerSandboxManager
 from backend.sandbox.interface import ISandbox, ISandboxManager
-from backend.sandbox.mock import MockSandboxManager
 from backend.sandbox.models import NetworkPolicy, SandboxConfig
 
 
@@ -19,7 +17,7 @@ class SandboxService:
     Central orchestration facade for managing ephemeral evaluation sandboxes.
     """
 
-    def __init__(self, manager: Optional[ISandboxManager] = None) -> None:
+    def __init__(self, manager: ISandboxManager | None = None) -> None:
         self._manager = manager or DockerSandboxManager()
 
     @property
@@ -27,7 +25,7 @@ class SandboxService:
         return self._manager
 
     def set_manager(self, manager: ISandboxManager) -> None:
-        """Allow switching manager (e.g. for testing with MockSandboxManager)."""
+        """Allow switching manager implementation."""
         self._manager = manager
 
     @asynccontextmanager

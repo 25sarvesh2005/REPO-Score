@@ -5,14 +5,9 @@ Strict adherence: Operates purely through static file inspection; NEVER executes
 
 import json
 import os
-from pathlib import Path
 import re
-from typing import Dict, List, Optional, Set, Tuple
-
-try:
-    import tomllib  # Python 3.11+ standard library
-except ImportError:
-    import tomli as tomllib  # Fallback
+import tomllib  # Python 3.11+ standard library
+from pathlib import Path
 
 from backend.repository.models import (
     EvaluatorCategory,
@@ -20,7 +15,7 @@ from backend.repository.models import (
 )
 
 # Supported programming language identifiers and manifest markers
-LANGUAGE_MANIFEST_SIGNATURES: Dict[str, List[str]] = {
+LANGUAGE_MANIFEST_SIGNATURES: dict[str, list[str]] = {
     "Python": [
         "pyproject.toml",
         "requirements.txt",
@@ -44,7 +39,7 @@ LANGUAGE_MANIFEST_SIGNATURES: Dict[str, List[str]] = {
 }
 
 # Framework identifiers and signature dependencies
-PYTHON_FRAMEWORK_SIGNATURES: Dict[str, str] = {
+PYTHON_FRAMEWORK_SIGNATURES: dict[str, str] = {
     "fastapi": "FastAPI",
     "flask": "Flask",
     "django": "Django",
@@ -59,7 +54,7 @@ PYTHON_FRAMEWORK_SIGNATURES: Dict[str, str] = {
     "unittest": "unittest",
 }
 
-NODE_FRAMEWORK_SIGNATURES: Dict[str, str] = {
+NODE_FRAMEWORK_SIGNATURES: dict[str, str] = {
     "express": "Express",
     "fastify": "Fastify",
     "next": "Next.js",
@@ -75,39 +70,53 @@ NODE_FRAMEWORK_SIGNATURES: Dict[str, str] = {
     "mocha": "Mocha",
 }
 
-WEB_FRAMEWORKS: Set[str] = {
-    "FastAPI", "Flask", "Django", "Starlette", "Tornado", "Sanic",
-    "Express", "Fastify", "Next.js", "NestJS", "Koa", "Spring Boot",
-    "Gin", "Echo", "Fiber", "Chi", "Actix-web", "Axum", "Rocket"
+WEB_FRAMEWORKS: set[str] = {
+    "FastAPI",
+    "Flask",
+    "Django",
+    "Starlette",
+    "Tornado",
+    "Sanic",
+    "Express",
+    "Fastify",
+    "Next.js",
+    "NestJS",
+    "Koa",
+    "Spring Boot",
+    "Gin",
+    "Echo",
+    "Fiber",
+    "Chi",
+    "Actix-web",
+    "Axum",
+    "Rocket",
 }
 
-CLI_FRAMEWORKS: Set[str] = {
-    "Click", "Typer", "Commander", "Yargs", "Clap", "Cobra"
-}
+CLI_FRAMEWORKS: set[str] = {"Click", "Typer", "Commander", "Yargs", "Clap", "Cobra"}
 
-WORKER_FRAMEWORKS: Set[str] = {
-    "Celery", "RQ", "Bull", "BullMQ"
-}
+WORKER_FRAMEWORKS: set[str] = {"Celery", "RQ", "Bull", "BullMQ"}
 
 
 def _read_file_text_safe(path: Path, max_bytes: int = 512 * 1024) -> str:
     """Safely read a text file up to max_bytes without executing or parsing foreign scripts."""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return f.read(max_bytes)
     except Exception:
         return ""
 
 
-def detect_python_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], List[str], List[str]]:
+def detect_python_manifests(
+    snapshot_dir: Path,
+) -> tuple[list[str], list[str], list[str], list[str]]:
     """
     Statically inspect Python manifests (pyproject.toml, requirements.txt, setup.py).
     Returns (frameworks, package_managers, entrypoints, test_runners).
     """
-    frameworks: List[str] = []
-    package_managers: List[str] = []
-    entrypoints: List[str] = []
-    test_runners: List[str] = []
+    frameworks: list[str] = []
+    package_managers: list[str] = []
+    entrypoints: list[str] = []
+    test_runners: list[str] = []
 
     # Check pyproject.toml
     pyproject_path = snapshot_dir / "pyproject.toml"
@@ -144,7 +153,7 @@ def detect_python_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], L
 
             # CLI Scripts
             scripts = parsed.get("project", {}).get("scripts", {})
-            for script_name in scripts.keys():
+            for script_name in scripts:
                 entrypoints.append(f"cli:{script_name}")
 
         except Exception:
@@ -175,15 +184,15 @@ def detect_python_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], L
     return frameworks, package_managers, entrypoints, test_runners
 
 
-def detect_node_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], List[str], List[str]]:
+def detect_node_manifests(snapshot_dir: Path) -> tuple[list[str], list[str], list[str], list[str]]:
     """
     Statically inspect Node.js manifests (package.json, lockfiles).
     Returns (frameworks, package_managers, entrypoints, test_runners).
     """
-    frameworks: List[str] = []
-    package_managers: List[str] = []
-    entrypoints: List[str] = []
-    test_runners: List[str] = []
+    frameworks: list[str] = []
+    package_managers: list[str] = []
+    entrypoints: list[str] = []
+    test_runners: list[str] = []
 
     # Check lockfiles for package manager
     if (snapshot_dir / "pnpm-lock.yaml").exists():
@@ -203,7 +212,7 @@ def detect_node_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], Lis
             deps = parsed.get("dependencies", {})
             dev_deps = parsed.get("devDependencies", {})
             all_deps = {**deps, **dev_deps}
-            all_keys = [k.lower() for k in all_deps.keys()]
+            all_keys = [k.lower() for k in all_deps]
 
             for sig, name in NODE_FRAMEWORK_SIGNATURES.items():
                 if any(sig in k for k in all_keys) and name not in frameworks:
@@ -228,16 +237,23 @@ def detect_node_manifests(snapshot_dir: Path) -> Tuple[List[str], List[str], Lis
                 package_managers.append("npm")
 
     # Common entrypoint candidate files
-    for candidate in ["index.js", "index.ts", "server.js", "server.ts", "src/index.ts", "src/index.js"]:
+    for candidate in [
+        "index.js",
+        "index.ts",
+        "server.js",
+        "server.ts",
+        "src/index.ts",
+        "src/index.js",
+    ]:
         if (snapshot_dir / candidate).exists() and candidate not in entrypoints:
             entrypoints.append(candidate)
 
     return frameworks, package_managers, entrypoints, test_runners
 
 
-def detect_ci_cd(snapshot_dir: Path) -> List[str]:
+def detect_ci_cd(snapshot_dir: Path) -> list[str]:
     """Identify CI/CD pipelines statically from repository configuration files."""
-    ci_cd: List[str] = []
+    ci_cd: list[str] = []
     # GitHub Actions
     gh_workflows = snapshot_dir / ".github" / "workflows"
     if gh_workflows.exists() and gh_workflows.is_dir():
@@ -269,11 +285,11 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
     entrypoints, package managers, and operational category without running user code.
     """
     resolved_dir = snapshot_dir.resolve()
-    detected_languages: Dict[str, float] = {}
-    detected_frameworks: List[str] = []
-    detected_package_managers: List[str] = []
-    detected_entrypoints: List[str] = []
-    detected_test_runners: List[str] = []
+    detected_languages: dict[str, float] = {}
+    detected_frameworks: list[str] = []
+    detected_package_managers: list[str] = []
+    detected_entrypoints: list[str] = []
+    detected_test_runners: list[str] = []
 
     # 1. Detect Languages based on manifests & source files
     for language, manifest_files in LANGUAGE_MANIFEST_SIGNATURES.items():
@@ -319,7 +335,7 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
     detected_ci_cd = detect_ci_cd(resolved_dir)
 
     # 3. Primary Language
-    primary_language: Optional[str] = None
+    primary_language: str | None = None
     if detected_languages:
         primary_language = max(detected_languages.keys(), key=lambda k: detected_languages[k])
 
@@ -336,7 +352,9 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
     elif any(f in WORKER_FRAMEWORKS for f in detected_frameworks):
         category = EvaluatorCategory.BACKGROUND_WORKER
         confidence = 0.90
-    elif any(f in CLI_FRAMEWORKS for f in detected_frameworks) or any("cli:" in ep for ep in detected_entrypoints):
+    elif any(f in CLI_FRAMEWORKS for f in detected_frameworks) or any(
+        "cli:" in ep for ep in detected_entrypoints
+    ):
         category = EvaluatorCategory.CLI_TOOL
         confidence = 0.90
     elif detected_entrypoints and any(

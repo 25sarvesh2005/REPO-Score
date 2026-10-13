@@ -3,6 +3,7 @@ Unit tests for repository reference and git ref validation engine.
 """
 
 import pytest
+
 from backend.repository.validator import (
     InvalidReferenceError,
     InvalidRepositoryUrlError,

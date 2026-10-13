@@ -22,7 +22,6 @@ We adopt a **Local-First AI Architecture**:
 - The subsystem is architected behind an abstract `IAIProvider` interface:
   - `LocalProvider` (Default, self-hosted Ollama)
   - `ExternalProvider` (Optional fallback for users who explicitly provide cloud API keys)
-  - `MockProvider` (Used for deterministic testing in CI environments)
 - If the AI provider is offline or times out, the evaluation completes successfully with full deterministic scoring and structured evidence intact.
 
 ---

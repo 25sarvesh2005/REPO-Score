@@ -3,13 +3,13 @@ Unit tests for HttpApiEvaluator.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
 from backend.runtime.http_evaluator import HttpApiEvaluator
 from backend.runtime.models import EvaluatorType, RuntimeFailureCode
-from backend.sandbox.mock import MockSandbox
-from backend.sandbox.models import SandboxConfig, SandboxExecutionResult
+from backend.sandbox.models import SandboxExecutionResult
 
 
 def test_http_evaluator_can_evaluate():
@@ -36,15 +36,33 @@ def test_http_evaluator_resolve_startup_command(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_http_evaluator_success(tmp_path: Path):
+async def test_http_evaluator_success(tmp_path: Path, make_mock_sandbox):
     (tmp_path / "main.py").write_text("app = 1")
     det = TechnologyDetectionResult(
         primary_language="Python",
         detected_frameworks=["FastAPI"],
         evaluator_category=EvaluatorCategory.WEB_API,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
-    sbx = MockSandbox("sbx-http-1", cfg)
+
+    def success_handler(cmd, *args, **kwargs):
+        cmd_str = " ".join(cmd)
+        if "urllib.request" in cmd_str and "endpoint" in cmd_str:
+            return SandboxExecutionResult(
+                exit_code=0,
+                stdout='{"ready": true, "endpoint": "/health", "duration_ms": 120}',
+                stderr="",
+                duration_ms=120,
+            )
+        if "urllib.request" in cmd_str and "count = 50" in cmd_str:
+            return SandboxExecutionResult(
+                exit_code=0,
+                stdout='{"total": 50, "successful": 50, "error_4xx": 0, "error_5xx": 0, "p50_ms": 4.5, "p95_ms": 12.2, "p99_ms": 18.0}',
+                stderr="",
+                duration_ms=500,
+            )
+        return SandboxExecutionResult(exit_code=0, stdout="build ok", stderr="", duration_ms=10)
+
+    sbx = make_mock_sandbox(success_handler)
 
     ev = HttpApiEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det, context={"evaluation_id": "test-http"})
@@ -60,16 +78,15 @@ async def test_http_evaluator_success(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_http_evaluator_boot_crash(tmp_path: Path):
+async def test_http_evaluator_boot_crash(tmp_path: Path, make_mock_sandbox):
     (tmp_path / "main.py").write_text("app = 1")
     det = TechnologyDetectionResult(
         primary_language="Python",
         detected_frameworks=["FastAPI"],
         evaluator_category=EvaluatorCategory.WEB_API,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def crash_handler(cmd):
+    def crash_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "urllib.request" in cmd_str:
             return SandboxExecutionResult(
@@ -80,7 +97,7 @@ async def test_http_evaluator_boot_crash(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="build ok", stderr="", duration_ms=10)
 
-    sbx = MockSandbox("sbx-http-crash", cfg, command_handler=crash_handler)
+    sbx = make_mock_sandbox(crash_handler)
     ev = HttpApiEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det)
 
@@ -91,16 +108,15 @@ async def test_http_evaluator_boot_crash(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_http_evaluator_startup_timeout(tmp_path: Path):
+async def test_http_evaluator_startup_timeout(tmp_path: Path, make_mock_sandbox):
     (tmp_path / "main.py").write_text("app = 1")
     det = TechnologyDetectionResult(
         primary_language="Python",
         detected_frameworks=["FastAPI"],
         evaluator_category=EvaluatorCategory.WEB_API,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def timeout_handler(cmd):
+    def timeout_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "urllib.request" in cmd_str:
             return SandboxExecutionResult(
@@ -112,7 +128,7 @@ async def test_http_evaluator_startup_timeout(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="ok", stderr="")
 
-    sbx = MockSandbox("sbx-http-timeout", cfg, command_handler=timeout_handler)
+    sbx = make_mock_sandbox(timeout_handler)
     ev = HttpApiEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det)
 

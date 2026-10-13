@@ -1,39 +1,15 @@
 """
-Unit tests for AI providers (MockProvider, LocalProvider, ExternalProvider).
+Unit tests for AI providers (LocalProvider, ExternalProvider).
 """
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
 import pytest
 
 from backend.ai.external_provider import ExternalProvider
 from backend.ai.local_provider import LocalProvider
-from backend.ai.mock_provider import MockProvider
-from backend.ai.models import AIAnalysisPayload
-
-
-@pytest.mark.asyncio
-async def test_mock_provider_success():
-    provider = MockProvider(model_name="mock-test")
-    assert provider.provider_name == "mock"
-    assert provider.model_name == "mock-test"
-    assert await provider.is_available() is True
-
-    result = await provider.generate_analysis(prompt="test prompt", system_instruction="test system")
-    assert result.success is True
-    assert result.is_fallback is False
-    assert "well-structured" in result.payload.executive_summary
-    assert len(result.payload.recommendations) > 0
-
-
-@pytest.mark.asyncio
-async def test_mock_provider_timeout_simulation():
-    provider = MockProvider()
-    result = await provider.generate_analysis(prompt="trigger:timeout in prompt", system_instruction="sys")
-    assert result.success is False
-    assert result.is_fallback is True
-    assert "exceeded timeout" in result.error_message
 
 
 @pytest.mark.asyncio
@@ -41,14 +17,16 @@ async def test_local_provider_successful_inference():
     provider = LocalProvider(base_url="http://localhost:11434", model_name="llama3.2:3b")
 
     mock_ollama_resp = {
-        "response": json.dumps({
-            "executive_summary": "High quality codebase.",
-            "architectural_assessment": "Clean modular architecture.",
-            "security_risk_narrative": "No critical vulnerabilities.",
-            "top_strengths": ["Strong tests"],
-            "critical_risks": [],
-            "recommendations": [],
-        }),
+        "response": json.dumps(
+            {
+                "executive_summary": "High quality codebase.",
+                "architectural_assessment": "Clean modular architecture.",
+                "security_risk_narrative": "No critical vulnerabilities.",
+                "top_strengths": ["Strong tests"],
+                "critical_risks": [],
+                "recommendations": [],
+            }
+        ),
         "prompt_eval_count": 200,
         "eval_count": 100,
     }

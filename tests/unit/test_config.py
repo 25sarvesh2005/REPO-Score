@@ -3,6 +3,7 @@ Unit tests for configuration validation.
 """
 
 import pytest
+
 from backend.core.config import Settings
 
 
@@ -24,8 +25,14 @@ def test_log_level_validation():
 
 
 def test_ai_provider_validation():
-    settings = Settings(AI_PROVIDER="MOCK")
-    assert settings.AI_PROVIDER == "mock"
+    s_ollama = Settings(AI_PROVIDER="OLLAMA")
+    assert s_ollama.AI_PROVIDER == "ollama"
+
+    s_ext = Settings(AI_PROVIDER="EXTERNAL")
+    assert s_ext.AI_PROVIDER == "external"
+
+    with pytest.raises(ValueError, match="Invalid AI_PROVIDER"):
+        Settings(AI_PROVIDER="mock")
 
     with pytest.raises(ValueError, match="Invalid AI_PROVIDER"):
         Settings(AI_PROVIDER="unsupported_ai")

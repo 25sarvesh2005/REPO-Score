@@ -3,8 +3,7 @@
 > **Document:** `NON_FUNCTIONAL_REQUIREMENTS.md`  
 > **System:** RepoScore — Autonomous Repository Intelligence & Software Evaluation Engine  
 > **Status:** Active / Requirements Baseline  
-> **Phase:** Phase 01 — Requirements Engineering  
-> **Authority:** `phases/01_REQUIREMENTS.md`, `phases/00_ARCHITECTURE.md`, `AGENTS.md`
+> **Authority:** [`docs/architecture/SYSTEM_ARCHITECTURE.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/docs/architecture/SYSTEM_ARCHITECTURE.md), [`AGENTS.md`](file:///c:/Partition/SERIOUS%20PROJECTS/REPO-Score/AGENTS.md)
 
 ---
 
@@ -169,7 +168,7 @@ In strict compliance with Phase 01 rules, performance thresholds that have not b
 ### NFR-021: Pluggable AI Provider Interface
 - **Priority:** P0
 - **Category:** Extensibility
-- **Description:** The AI engine MUST communicate strictly through the `IAIProvider` protocol, enabling seamless hot-swapping between `LocalProvider` (Ollama), `ExternalProvider`, and `MockProvider`.
+- **Description:** The AI engine MUST communicate strictly through the `IAIProvider` protocol, enabling seamless hot-swapping between `LocalProvider` (Ollama) and `ExternalProvider` (OpenAI/Anthropic/Gemini).
 - **Verification:** Unit test switching provider implementation via configuration without code alterations.
 
 ### NFR-022: Type Safety & Static Linting Compliance

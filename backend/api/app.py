@@ -3,12 +3,12 @@ FastAPI Application Factory.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
-from typing import AsyncGenerator
+from pathlib import Path
+
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from pathlib import Path
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -31,9 +31,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     local_worker = None
     local_worker_task = None
     if "sqlite" in settings.DATABASE_URL:
+        import backend.database.models  # noqa: F401
         from backend.database.base import TimestampedBase
         from backend.database.session import engine
-        import backend.database.models  # noqa: F401
+
         async with engine.begin() as conn:
             await conn.run_sync(TimestampedBase.metadata.create_all)
         logger.info("SQLite database tables initialized successfully.")
@@ -75,7 +76,12 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Correlation-ID", "Location", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        expose_headers=[
+            "X-Correlation-ID",
+            "Location",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+        ],
     )
 
     # 2. Rate Limiting Middleware

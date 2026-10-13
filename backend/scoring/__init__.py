@@ -3,8 +3,8 @@ Deterministic Evidence-Backed Scoring Engine Module.
 """
 
 from backend.scoring.calculator import (
-    DeterministicScoringEngine,
     SCORING_VERSION,
+    DeterministicScoringEngine,
 )
 from backend.scoring.models import (
     DimensionScoreResult,

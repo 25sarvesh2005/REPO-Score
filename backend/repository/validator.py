@@ -4,7 +4,6 @@ Repository URL and reference validation engine with SSRF and command-injection p
 
 import ipaddress
 import re
-from typing import Optional
 from urllib.parse import urlparse
 
 from backend.api.errors import ValidationException
@@ -29,17 +28,17 @@ class InvalidReferenceError(ValidationException):
 
 # Regex patterns
 GITHUB_SSH_OR_SHORTHAND_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$")
-GITHUB_URL_PATTERN = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+GITHUB_URL_PATTERN = re.compile(
+    r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$"
+)
 SAFE_REF_PATTERN = re.compile(r"^[A-Za-z0-9_./@#-]{1,128}$")
 COMMIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
-def validate_and_parse_repository_url(
-    raw_url: str, ref: Optional[str] = None
-) -> RepositoryReference:
+def validate_and_parse_repository_url(raw_url: str, ref: str | None = None) -> RepositoryReference:
     """
     Validate, sanitize, and normalize a repository URL or shorthand reference.
-    
+
     Guarantees:
     - Enforces HTTPS GitHub URLs only (or 'owner/repo' shorthand).
     - Prevents SSRF attacks against localhost, metadata endpoints, and internal networks.
@@ -56,7 +55,9 @@ def validate_and_parse_repository_url(
         owner, name = shorthand_match.group(1), shorthand_match.group(2)
         # Verify neither component is a disguised path traversal or URL scheme
         if owner in {".", ".."} or name in {".", ".."}:
-            raise InvalidRepositoryUrlError("Repository owner and name must not contain path traversal elements.")
+            raise InvalidRepositoryUrlError(
+                "Repository owner and name must not contain path traversal elements."
+            )
         if name.endswith(".git"):
             name = name[:-4]
         canonical_url = f"https://github.com/{owner}/{name}"
@@ -106,7 +107,9 @@ def validate_and_parse_repository_url(
 
     owner, name = match.group(1), match.group(2)
     if owner in {".", ".."} or name in {".", ".."}:
-        raise InvalidRepositoryUrlError("Repository owner and name must not contain path traversal elements.")
+        raise InvalidRepositoryUrlError(
+            "Repository owner and name must not contain path traversal elements."
+        )
 
     canonical_url = f"https://github.com/{owner}/{name}"
     parsed_ref = validate_git_ref(ref) if ref else None
@@ -120,7 +123,7 @@ def validate_and_parse_repository_url(
     )
 
 
-def validate_git_ref(ref: Optional[str]) -> Optional[str]:
+def validate_git_ref(ref: str | None) -> str | None:
     """
     Validate git reference (branch, tag, or 40-character hexadecimal commit SHA).
     Rejects any characters that could trigger command injection or path traversal.
@@ -134,10 +137,14 @@ def validate_git_ref(ref: Optional[str]) -> Optional[str]:
 
     # Length constraint
     if len(cleaned_ref) > 128:
-        raise InvalidReferenceError("Git reference exceeds maximum allowed length of 128 characters.")
+        raise InvalidReferenceError(
+            "Git reference exceeds maximum allowed length of 128 characters."
+        )
 
     # Dangerous characters / traversal checks
-    if any(c in cleaned_ref for c in [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\0"]):
+    if any(
+        c in cleaned_ref for c in [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\0"]
+    ):
         raise InvalidReferenceError("Git reference contains illegal shell metacharacters.")
 
     if cleaned_ref.startswith("-") or cleaned_ref.startswith("/"):

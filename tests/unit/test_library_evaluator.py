@@ -3,6 +3,7 @@ Unit tests for LibraryEvaluator and native test parsers.
 """
 
 from pathlib import Path
+
 import pytest
 
 from backend.repository.models import EvaluatorCategory, TechnologyDetectionResult
@@ -14,8 +15,7 @@ from backend.runtime.library_evaluator import (
     parse_pytest_output,
 )
 from backend.runtime.models import EvaluatorType, RuntimeFailureCode, TestOrigin
-from backend.sandbox.mock import MockSandbox
-from backend.sandbox.models import SandboxConfig, SandboxExecutionResult
+from backend.sandbox.models import SandboxExecutionResult
 
 
 def test_parse_pytest_output():
@@ -76,7 +76,7 @@ FAIL
 
 
 @pytest.mark.asyncio
-async def test_library_evaluator_execution(tmp_path: Path):
+async def test_library_evaluator_execution(tmp_path: Path, make_mock_sandbox):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     (tests_dir / "test_sample.py").write_text("def test_ok(): pass\n")
@@ -86,9 +86,8 @@ async def test_library_evaluator_execution(tmp_path: Path):
         detected_test_runners=["pytest"],
         evaluator_category=EvaluatorCategory.LIBRARY,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def test_handler(cmd):
+    def test_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "pytest" in cmd_str:
             return SandboxExecutionResult(
@@ -99,7 +98,7 @@ async def test_library_evaluator_execution(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="ok", stderr="")
 
-    sbx = MockSandbox("sbx-lib-1", cfg, command_handler=test_handler)
+    sbx = make_mock_sandbox(test_handler)
     ev = LibraryEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det, context={"evaluation_id": "test-lib"})
 
@@ -113,7 +112,7 @@ async def test_library_evaluator_execution(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_library_evaluator_test_failure(tmp_path: Path):
+async def test_library_evaluator_test_failure(tmp_path: Path, make_mock_sandbox):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
 
@@ -122,9 +121,8 @@ async def test_library_evaluator_test_failure(tmp_path: Path):
         detected_test_runners=["pytest"],
         evaluator_category=EvaluatorCategory.LIBRARY,
     )
-    cfg = SandboxConfig(image="reposcore/sandbox-python:3.11-slim")
 
-    def fail_handler(cmd):
+    def fail_handler(cmd, *args, **kwargs):
         cmd_str = " ".join(cmd)
         if "pytest" in cmd_str:
             return SandboxExecutionResult(
@@ -135,7 +133,7 @@ async def test_library_evaluator_test_failure(tmp_path: Path):
             )
         return SandboxExecutionResult(exit_code=0, stdout="ok", stderr="")
 
-    sbx = MockSandbox("sbx-lib-fail", cfg, command_handler=fail_handler)
+    sbx = make_mock_sandbox(fail_handler)
     ev = LibraryEvaluator()
     obs = await ev.evaluate(sbx, tmp_path, det)
 

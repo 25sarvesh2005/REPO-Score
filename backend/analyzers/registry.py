@@ -5,9 +5,9 @@ Discovers, filters, and concurrently executes static analyzer adapters across re
 
 import asyncio
 import logging
-from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any
 
 from backend.analyzers.ast_metrics import AstMetricsAnalyzer
 from backend.analyzers.dependency_scanner import DependencyVulnerabilityAnalyzer
@@ -26,7 +26,7 @@ class AnalyzerRegistry:
     """
 
     def __init__(self, register_defaults: bool = True) -> None:
-        self._analyzers: List[BaseAnalyzer] = []
+        self._analyzers: list[BaseAnalyzer] = []
         if register_defaults:
             self._register_default_analyzers()
 
@@ -40,24 +40,24 @@ class AnalyzerRegistry:
         """Register a new analyzer adapter."""
         self._analyzers.append(analyzer)
 
-    def get_registered_analyzers(self) -> List[BaseAnalyzer]:
+    def get_registered_analyzers(self) -> list[BaseAnalyzer]:
         """Return list of all registered adapters."""
         return list(self._analyzers)
 
-    def get_applicable_analyzers(self, tech_stack: Dict[str, Any]) -> List[BaseAnalyzer]:
+    def get_applicable_analyzers(self, tech_stack: dict[str, Any]) -> list[BaseAnalyzer]:
         """Filter registered analyzers that match the detected repository technology stack."""
         return [a for a in self._analyzers if a.can_analyze(tech_stack)]
 
     async def execute_all(
         self,
         snapshot_path: Path,
-        tech_stack: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
+        tech_stack: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
         """
         Execute all applicable adapters in parallel across the immutable snapshot.
         Normalizes and deduplicates findings before returning.
-        
+
         Failure Resilience: If any individual analyzer fails or times out, its error is logged,
         and results from other analyzers are preserved.
         """
@@ -74,7 +74,7 @@ class AnalyzerRegistry:
         start_time = time.monotonic()
 
         # Run all selected analyzers concurrently
-        results: List[AnalyzerExecutionResult] = await asyncio.gather(
+        results: list[AnalyzerExecutionResult] = await asyncio.gather(
             *[analyzer.analyze(snapshot_path, context) for analyzer in applicable_analyzers],
             return_exceptions=False,
         )
@@ -83,7 +83,7 @@ class AnalyzerRegistry:
         logger.info(f"Concurrent static analysis execution completed in {elapsed_ms}ms")
 
         # Aggregate findings
-        all_findings: List[NormalizedFinding] = []
+        all_findings: list[NormalizedFinding] = []
         for res in results:
             if not res.success:
                 logger.warning(

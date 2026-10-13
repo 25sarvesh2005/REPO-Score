@@ -10,17 +10,16 @@ Adheres strictly to Phase 15 requirements:
 """
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import UTC, datetime
+from pathlib import Path
 
 # Mapping of source path prefixes to focused test suites
-SUBSYSTEM_TEST_MAP: Dict[str, List[str]] = {
+SUBSYSTEM_TEST_MAP: dict[str, list[str]] = {
     "backend/sandbox": [
         "tests/unit/test_sandbox_validator.py",
         "tests/unit/test_sandbox_sanitizer.py",
@@ -99,11 +98,13 @@ def sanitize_text(text: str) -> str:
     # Redact AWS keys
     text = re.sub(r"AKIA[0-9A-Z]{16}", "[REDACTED_AWS_KEY]", text)
     # Redact database connection strings
-    text = re.sub(r"postgresql://[^:]+:[^@]+@", "postgresql://[REDACTED_USER]:[REDACTED_PASS]@", text)
+    text = re.sub(
+        r"postgresql://[^:]+:[^@]+@", "postgresql://[REDACTED_USER]:[REDACTED_PASS]@", text
+    )
     return text
 
 
-def get_git_diff_files(base_sha: Optional[str] = None, head_sha: Optional[str] = None) -> List[str]:
+def get_git_diff_files(base_sha: str | None = None, head_sha: str | None = None) -> list[str]:
     """Inspect changed files using git diff."""
     cmd = ["git", "diff", "--name-only"]
     if base_sha and head_sha:
@@ -128,10 +129,10 @@ def get_git_diff_files(base_sha: Optional[str] = None, head_sha: Optional[str] =
         return files
 
 
-def map_files_to_test_targets(files: List[str]) -> Tuple[List[str], Set[str]]:
+def map_files_to_test_targets(files: list[str]) -> tuple[list[str], set[str]]:
     """Determine focused test files based on modified paths."""
-    matched_targets: Set[str] = set()
-    affected_subsystems: Set[str] = set()
+    matched_targets: set[str] = set()
+    affected_subsystems: set[str] = set()
 
     for file_path in files:
         normalized = file_path.replace("\\", "/")
@@ -150,7 +151,7 @@ def map_files_to_test_targets(files: List[str]) -> Tuple[List[str], Set[str]]:
     return sorted(matched_targets), affected_subsystems
 
 
-def run_pytest(target_args: List[str]) -> Tuple[int, str, float]:
+def run_pytest(target_args: list[str]) -> tuple[int, str, float]:
     """Execute pytest on target arguments and record duration and output."""
     t0 = time.monotonic()
     cmd = [sys.executable, "-m", "pytest", "-q"] + target_args
@@ -166,16 +167,22 @@ def run_pytest(target_args: List[str]) -> Tuple[int, str, float]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="RepoScore Commit-Aware Regression Checker")
-    parser.add_argument("--base-sha", type=str, default=None, help="Base commit SHA (e.g. PR target)")
-    parser.add_argument("--head-sha", type=str, default=None, help="Head commit SHA (e.g. PR source)")
+    parser.add_argument(
+        "--base-sha", type=str, default=None, help="Base commit SHA (e.g. PR target)"
+    )
+    parser.add_argument(
+        "--head-sha", type=str, default=None, help="Head commit SHA (e.g. PR source)"
+    )
     parser.add_argument("--output-json", type=str, default=None, help="Output path for JSON report")
-    parser.add_argument("--output-md", type=str, default=None, help="Output path for Markdown summary")
+    parser.add_argument(
+        "--output-md", type=str, default=None, help="Output path for Markdown summary"
+    )
     parser.add_argument("--skip-full-suite", action="store_true", help="Skip full test suite pass")
     args = parser.parse_args()
 
     print("=================================================================")
     print(" RepoScore Commit-Aware Regression Gate")
-    print(f" Timestamp: {datetime.now(timezone.utc).isoformat()}")
+    print(f" Timestamp: {datetime.now(UTC).isoformat()}")
     print("=================================================================")
 
     # 1. Identify changed files
@@ -188,7 +195,9 @@ def main() -> int:
 
     # 2. Map files to test targets
     focused_targets, affected_subsystems = map_files_to_test_targets(changed_files)
-    print(f"\nAffected Subsystems: {', '.join(sorted(affected_subsystems)) if affected_subsystems else 'None (General/Docs)'}")
+    print(
+        f"\nAffected Subsystems: {', '.join(sorted(affected_subsystems)) if affected_subsystems else 'None (General/Docs)'}"
+    )
     print(f"Focused Test Targets: {len(focused_targets)} file(s)")
 
     # 3. Run focused tests
@@ -225,12 +234,12 @@ def main() -> int:
 
     # 5. Build structured report
     report_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "base_sha": args.base_sha,
         "head_sha": args.head_sha,
         "changed_files_count": len(changed_files),
         "changed_files": changed_files,
-        "affected_subsystems": sorted(list(affected_subsystems)),
+        "affected_subsystems": sorted(affected_subsystems),
         "focused_targets": focused_targets,
         "focused_result": focused_result,
         "full_result": full_result,
@@ -262,7 +271,9 @@ def main() -> int:
             "",
             "### Output Snippet",
             "```",
-            full_result["output"].strip()[-1000:] if len(full_result["output"]) > 1000 else full_result["output"].strip(),
+            full_result["output"].strip()[-1000:]
+            if len(full_result["output"]) > 1000
+            else full_result["output"].strip(),
             "```",
         ]
         out_md_p = Path(args.output_md)

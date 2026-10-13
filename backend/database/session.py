@@ -2,8 +2,9 @@
 Async PostgreSQL database session management and connectivity health checks.
 """
 
-from typing import AsyncGenerator
-from sqlalchemy import text
+from collections.abc import AsyncGenerator
+
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,8 +16,6 @@ from backend.core.config import settings
 from backend.observability.logger import get_logger
 
 logger = get_logger("reposcore.database")
-
-from sqlalchemy import event, text
 
 
 def _create_engine() -> AsyncEngine:

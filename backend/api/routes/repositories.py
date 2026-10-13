@@ -3,14 +3,14 @@ Repository Management API Endpoints.
 Adheres strictly to docs/api/ENDPOINT_CATALOG.md Section 3.1 and RFC 7807 problem details.
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
 import uuid
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.errors import ConflictException, EntityNotFoundException
+from backend.api.errors import EntityNotFoundException
 from backend.api.schemas.contracts import (
     RepositoryRegistrationRequest,
     RepositoryResponse,
@@ -55,8 +55,8 @@ async def register_repository(
         forks_count=0,
         open_issues_count=0,
         primary_language=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     session.add(new_repo)
     await session.flush()
@@ -65,7 +65,7 @@ async def register_repository(
 
 @router.get(
     "",
-    response_model=List[RepositoryResponse],
+    response_model=list[RepositoryResponse],
     summary="List Repositories",
     description="List all registered repositories with pagination.",
 )
@@ -73,7 +73,7 @@ async def list_repositories(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-) -> List[RepositoryResponse]:
+) -> list[RepositoryResponse]:
     stmt = select(Repository).order_by(Repository.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(stmt)
     repos = result.scalars().all()

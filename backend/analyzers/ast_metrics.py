@@ -6,7 +6,7 @@ Strictly inspects abstract syntax trees without executing repository code.
 import ast
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.analyzers.interface import BaseAnalyzer
 from backend.analyzers.models import (
@@ -24,7 +24,7 @@ class ComplexityVisitor(ast.NodeVisitor):
     """
 
     def __init__(self) -> None:
-        self.functions: List[Dict[str, Any]] = []
+        self.functions: list[dict[str, Any]] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._analyze_function(node, is_async=False)
@@ -34,7 +34,9 @@ class ComplexityVisitor(ast.NodeVisitor):
         self._analyze_function(node, is_async=True)
         self.generic_visit(node)
 
-    def _analyze_function(self, node: ast.AST, is_async: bool) -> None:
+    def _analyze_function(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool
+    ) -> None:
         func_name = getattr(node, "name", "<anonymous>")
         start_line = getattr(node, "lineno", 1)
         end_line = getattr(node, "end_lineno", start_line)
@@ -105,7 +107,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
             description="Computes Cyclomatic complexity, function length, parameter counts, and docstring coverage.",
         )
 
-    def can_analyze(self, tech_stack: Dict[str, Any]) -> bool:
+    def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         primary = tech_stack.get("primary_language", "")
         langs = tech_stack.get("detected_languages", {})
         return primary == "Python" or "Python" in langs
@@ -113,14 +115,18 @@ class AstMetricsAnalyzer(BaseAnalyzer):
     async def _execute_analysis(
         self,
         snapshot_path: Path,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[NormalizedFinding]:
-        findings: List[NormalizedFinding] = []
+        context: dict[str, Any] | None = None,
+    ) -> list[NormalizedFinding]:
+        findings: list[NormalizedFinding] = []
         resolved_root = snapshot_path.resolve()
 
         for root, dirs, files in os.walk(resolved_root):
             # Ignore hidden dirs and build artifacts
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".") and d not in {"venv", "node_modules", "build", "dist"}
+            ]
 
             for filename in files:
                 if not filename.endswith(".py"):
@@ -217,7 +223,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                                 severity=SeverityLevel.LOW,
                                 confidence=0.85,
                                 title=f"Long Function '{func['name']}' ({func['line_count']} lines)",
-                                description=f"Function exceeds recommended single-responsibility length threshold (60 lines).",
+                                description="Function exceeds recommended single-responsibility length threshold (60 lines).",
                                 recommendation="Decompose long function into cohesive subroutines.",
                                 location=FindingLocation(
                                     file_path=rel_path,

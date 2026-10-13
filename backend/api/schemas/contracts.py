@@ -3,11 +3,12 @@ RepoScore Pydantic v2 API Contracts.
 """
 
 from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, List, Optional
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -76,7 +77,7 @@ class RepositoryResponse(BaseModel):
     default_branch: str
     is_private: bool
     stars_count: int
-    primary_language: Optional[str] = None
+    primary_language: str | None = None
     created_at: datetime
 
 
@@ -89,7 +90,7 @@ class EvaluationOptions(BaseModel):
 class EvaluationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repository_id: UUID
-    ref: Optional[str] = Field(default="main", max_length=128)
+    ref: str | None = Field(default="main", max_length=128)
     options: EvaluationOptions = Field(default_factory=EvaluationOptions)
 
 
@@ -110,11 +111,11 @@ class EvaluationRecordResponse(BaseModel):
     status: EvaluationStatus
     correlation_id: UUID
     trigger_source: str
-    worker_id: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    duration_ms: Optional[int] = None
-    error_summary: Optional[str] = None
+    worker_id: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    duration_ms: int | None = None
+    error_summary: str | None = None
     created_at: datetime
 
 
@@ -122,7 +123,7 @@ class EvaluationStatusResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evaluation_id: UUID
     status: EvaluationStatus
-    current_step: Optional[str] = None
+    current_step: str | None = None
     elapsed_seconds: int
     is_terminal: bool
 
@@ -151,7 +152,7 @@ class ScoreDimensionResponse(BaseModel):
     score: Decimal = Field(..., ge=0, le=100)
     weight: Decimal = Field(..., ge=0, le=1)
     base_score: Decimal = Decimal("100.0")
-    itemized_receipt: List[ItemizedReceiptItem] = Field(default_factory=list)
+    itemized_receipt: list[ItemizedReceiptItem] = Field(default_factory=list)
 
 
 class ScorecardResponse(BaseModel):
@@ -160,18 +161,18 @@ class ScorecardResponse(BaseModel):
     scoring_version: str = "1.0.0"
     overall_score: Decimal = Field(..., ge=0, le=100)
     grade: LetterGrade
-    dimensions: List[ScoreDimensionResponse]
-    ai_executive_summary: Optional[str] = None
+    dimensions: list[ScoreDimensionResponse]
+    ai_executive_summary: str | None = None
     created_at: datetime
 
 
 class EvidenceLocation(BaseModel):
     file_path: str
-    start_line: Optional[int] = None
-    end_line: Optional[int] = None
-    start_col: Optional[int] = None
-    end_col: Optional[int] = None
-    symbol_name: Optional[str] = None
+    start_line: int | None = None
+    end_line: int | None = None
+    start_col: int | None = None
+    end_col: int | None = None
+    symbol_name: str | None = None
 
 
 class EvidenceItemResponse(BaseModel):
@@ -183,13 +184,13 @@ class EvidenceItemResponse(BaseModel):
     confidence: float
     title: str
     description: str
-    location: Optional[EvidenceLocation] = None
+    location: EvidenceLocation | None = None
     created_at: datetime
 
 
 class PaginatedEvidenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    items: List[EvidenceItemResponse]
+    items: list[EvidenceItemResponse]
     total_count: int
     limit: int
     offset: int
@@ -210,16 +211,16 @@ class RuntimeTelemetryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evaluation_id: UUID
     evaluator_strategy: str = "generic"
-    build_success: Optional[bool] = None
-    build_exit_code: Optional[int] = None
-    startup_ready: Optional[bool] = None
-    startup_port: Optional[int] = None
-    latency_p95_ms: Optional[float] = None
+    build_success: bool | None = None
+    build_exit_code: int | None = None
+    startup_ready: bool | None = None
+    startup_port: int | None = None
+    latency_p95_ms: float | None = None
     total_http_requests: int = 0
     error_5xx_requests: int = 0
-    failure_code: Optional[str] = None
-    failure_reason: Optional[str] = None
-    observations: List[dict] = Field(default_factory=list)
+    failure_code: str | None = None
+    failure_reason: str | None = None
+    observations: list[dict] = Field(default_factory=list)
 
 
 class AIInterpretationResponse(BaseModel):
@@ -231,12 +232,12 @@ class AIInterpretationResponse(BaseModel):
     executive_summary: str
     architectural_assessment: str
     security_risk_narrative: str
-    runtime_failure_root_cause: Optional[str] = None
-    top_strengths: List[str] = Field(default_factory=list)
-    critical_risks: List[str] = Field(default_factory=list)
-    recommendations: List[dict] = Field(default_factory=list)
-    tokens_consumed: Optional[int] = None
-    duration_ms: Optional[int] = None
+    runtime_failure_root_cause: str | None = None
+    top_strengths: list[str] = Field(default_factory=list)
+    critical_risks: list[str] = Field(default_factory=list)
+    recommendations: list[dict] = Field(default_factory=list)
+    tokens_consumed: int | None = None
+    duration_ms: int | None = None
     is_fallback: bool = False
 
 
@@ -245,8 +246,8 @@ class EvaluationHistoryItemResponse(BaseModel):
     id: UUID
     repository_id: UUID
     status: EvaluationStatus
-    commit_sha: Optional[str] = None
-    overall_score: Optional[Decimal] = None
-    grade: Optional[LetterGrade] = None
+    commit_sha: str | None = None
+    overall_score: Decimal | None = None
+    grade: LetterGrade | None = None
     created_at: datetime
-    duration_ms: Optional[int] = None
+    duration_ms: int | None = None

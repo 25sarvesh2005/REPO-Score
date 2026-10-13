@@ -3,7 +3,9 @@ Integration tests for operational health and readiness endpoints.
 """
 
 from unittest.mock import AsyncMock, patch
+
 from fastapi.testclient import TestClient
+
 from backend.api.app import create_app
 from backend.core.queue import InMemoryJobQueue, set_job_queue
 

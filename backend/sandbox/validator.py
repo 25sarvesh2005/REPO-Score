@@ -3,9 +3,7 @@ Security Invariants Validator for Ephemeral Sandbox Configurations.
 Strictly validates adherence to ADR-002, SANDBOX_SECURITY_SPEC, and AGENTS Prime Directives.
 """
 
-from pathlib import Path
 import re
-from typing import Dict
 
 from backend.sandbox.exceptions import SandboxSecurityViolationError
 from backend.sandbox.models import SandboxConfig
@@ -27,7 +25,7 @@ def parse_memory_mb(mem_str: str) -> int:
 def validate_sandbox_security_invariants(config: SandboxConfig) -> None:
     """
     Validate that SandboxConfig strictly adheres to container security mandates.
-    
+
     Invariants Enforced:
     1. Root execution is prohibited (must not be '0', 'root', or '0:0').
     2. Capabilities must be completely stripped ('cap_drop' contains 'ALL').
