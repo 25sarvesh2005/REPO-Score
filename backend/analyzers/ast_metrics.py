@@ -179,10 +179,10 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                     )
                 )
 
-                crit_complexity = 30 if is_test_file else 15
-                med_complexity = 20 if is_test_file else 10
-                max_lines = 150 if is_test_file else 60
-                max_params = 12 if is_test_file else 6
+                crit_complexity = 35 if is_test_file else 20
+                med_complexity = 25 if is_test_file else 12
+                max_lines = 250 if is_test_file else 120
+                max_params = 12 if is_test_file else 7
 
                 for func in visitor.functions:
                     # 1. Cyclomatic Complexity

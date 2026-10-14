@@ -186,7 +186,7 @@ class SecretScannerAnalyzer(BaseAnalyzer):
                                 )
                                 or rel_path.lower().startswith(("docs/", "doc/", "tests/", "test/"))
                             )
-                            effective_severity = SeverityLevel.LOW if is_test_or_doc else severity
+                            effective_severity = SeverityLevel.INFO if is_test_or_doc else severity
                             effective_title = (
                                 f"[Test/Doc Context] {title} in {rel_path}"
                                 if is_test_or_doc

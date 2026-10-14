@@ -90,7 +90,7 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
             or "Secret" in evidence.title
         ):
             rule_code = "RULE_SEC_HARDCODED_SECRET"
-            base_points = Decimal("25.0")
+            base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("25.0"))
         elif "DEP-CVE" in evidence.rule_id or "Vulnerability" in evidence.title:
             if evidence.severity == SeverityLevel.CRITICAL:
                 rule_code = "RULE_SEC_CRITICAL_CVE"
@@ -146,12 +146,25 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
 
     # 5. MAINTAINABILITY (SCORE-015)
     elif evidence.category == EvidenceCategory.MAINTAINABILITY:
-        if "AST-001" in evidence.rule_id or "Cyclomatic" in evidence.title:
+        if (
+            "AST-001" in evidence.rule_id
+            or "CYCLOMATIC" in evidence.rule_id
+            or "Cyclomatic" in evidence.title
+        ):
             rule_code = "RULE_MAINT_HIGH_COMPLEXITY"
-            base_points = Decimal("5.0")
-        elif "AST-002" in evidence.rule_id or "Excessive" in evidence.title:
+            base_points = (
+                Decimal("5.0") if evidence.severity == SeverityLevel.HIGH else Decimal("2.5")
+            )
+        elif (
+            "AST-002" in evidence.rule_id
+            or "FUNCTION-TOO-LONG" in evidence.rule_id
+            or "Long Function" in evidence.title
+        ):
             rule_code = "RULE_MAINT_LONG_FUNCTION"
-            base_points = Decimal("3.0")
+            base_points = Decimal("2.0")
+        elif "TOO-MANY-PARAMS" in evidence.rule_id or "Too Many Parameters" in evidence.title:
+            rule_code = "RULE_MAINT_EXCESSIVE_PARAMS"
+            base_points = Decimal("1.5")
         elif "LINT" in evidence.rule_id:
             rule_code = "RULE_MAINT_LINTER_ERROR"
             base_points = Decimal("1.0")
