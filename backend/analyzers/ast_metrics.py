@@ -168,9 +168,25 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                 visitor = ComplexityVisitor()
                 visitor.visit(tree)
 
+                is_test_file = (
+                    any(
+                        part.lower() in {"test", "tests", "__tests__", "spec", "specs"}
+                        for part in Path(rel_path).parts[:-1]
+                    )
+                    or filename.lower().startswith("test_")
+                    or filename.lower().endswith(
+                        ("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts")
+                    )
+                )
+
+                crit_complexity = 30 if is_test_file else 15
+                med_complexity = 20 if is_test_file else 10
+                max_lines = 150 if is_test_file else 60
+                max_params = 12 if is_test_file else 6
+
                 for func in visitor.functions:
                     # 1. Cyclomatic Complexity
-                    if func["complexity"] > 15:
+                    if func["complexity"] > crit_complexity:
                         findings.append(
                             NormalizedFinding(
                                 analyzer_id="ast-metrics",
@@ -182,7 +198,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                                 title=f"High Cyclomatic Complexity in '{func['name']}' ({func['complexity']})",
                                 description=(
                                     f"Function '{func['name']}' has a cyclomatic complexity of {func['complexity']}, "
-                                    "exceeding recommended threshold of 15. This increases testing difficulty and defect risk."
+                                    f"exceeding recommended threshold of {crit_complexity}. This increases testing difficulty and defect risk."
                                 ),
                                 recommendation="Refactor complex branching logic into smaller helper functions.",
                                 location=FindingLocation(
@@ -192,7 +208,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                                 ),
                             )
                         )
-                    elif func["complexity"] > 10:
+                    elif func["complexity"] > med_complexity:
                         findings.append(
                             NormalizedFinding(
                                 analyzer_id="ast-metrics",
@@ -212,8 +228,8 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                             )
                         )
 
-                    # 2. Function Length (>60 lines)
-                    if func["line_count"] > 60:
+                    # 2. Function Length
+                    if func["line_count"] > max_lines:
                         findings.append(
                             NormalizedFinding(
                                 analyzer_id="ast-metrics",
@@ -223,7 +239,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                                 severity=SeverityLevel.LOW,
                                 confidence=0.85,
                                 title=f"Long Function '{func['name']}' ({func['line_count']} lines)",
-                                description="Function exceeds recommended single-responsibility length threshold (60 lines).",
+                                description=f"Function exceeds recommended single-responsibility length threshold ({max_lines} lines).",
                                 recommendation="Decompose long function into cohesive subroutines.",
                                 location=FindingLocation(
                                     file_path=rel_path,
@@ -233,8 +249,8 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                             )
                         )
 
-                    # 3. Excessive Parameters (>6 args)
-                    if func["param_count"] > 6:
+                    # 3. Excessive Parameters
+                    if func["param_count"] > max_params:
                         findings.append(
                             NormalizedFinding(
                                 analyzer_id="ast-metrics",
@@ -244,7 +260,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
                                 severity=SeverityLevel.LOW,
                                 confidence=0.90,
                                 title=f"Too Many Parameters in '{func['name']}' ({func['param_count']} args)",
-                                description="Function takes more than 6 parameters, reducing readability and maintainability.",
+                                description=f"Function takes more than {max_params} parameters, reducing readability and maintainability.",
                                 recommendation="Encapsulate related parameters into a dedicated data structure or Pydantic model.",
                                 location=FindingLocation(
                                     file_path=rel_path,

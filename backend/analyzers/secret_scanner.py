@@ -164,15 +164,44 @@ class SecretScannerAnalyzer(BaseAnalyzer):
                             )
                             sanitized_line = line.replace(matched_secret, masked_secret).strip()
 
+                            is_test_or_doc = (
+                                any(
+                                    part.lower()
+                                    in {
+                                        "test",
+                                        "tests",
+                                        "fixtures",
+                                        "test_fixtures",
+                                        "__tests__",
+                                        "spec",
+                                        "specs",
+                                        "docs",
+                                        "doc",
+                                    }
+                                    for part in Path(rel_path).parts[:-1]
+                                )
+                                or filename.lower().startswith("test_")
+                                or filename.lower().endswith(
+                                    ("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts")
+                                )
+                                or rel_path.lower().startswith(("docs/", "doc/", "tests/", "test/"))
+                            )
+                            effective_severity = SeverityLevel.LOW if is_test_or_doc else severity
+                            effective_title = (
+                                f"[Test/Doc Context] {title} in {rel_path}"
+                                if is_test_or_doc
+                                else f"{title} in {rel_path}"
+                            )
+
                             findings.append(
                                 NormalizedFinding(
                                     analyzer_id="secret-scanner",
                                     tool_version=self.metadata.version,
                                     rule_id=rule_id,
                                     category=EvidenceCategory.SECURITY,
-                                    severity=severity,
-                                    confidence=0.98,
-                                    title=f"{title} in {rel_path}",
+                                    severity=effective_severity,
+                                    confidence=0.98 if not is_test_or_doc else 0.50,
+                                    title=effective_title,
                                     description=(
                                         f"A potential sensitive credential was identified at line {line_idx}. "
                                         "Hardcoded secrets in source control risk unauthorized credential exposure."
