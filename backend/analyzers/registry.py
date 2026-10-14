@@ -15,6 +15,7 @@ from backend.analyzers.interface import BaseAnalyzer
 from backend.analyzers.models import AnalyzerExecutionResult, NormalizedFinding
 from backend.analyzers.normalizer import FindingNormalizer
 from backend.analyzers.python_linter import PythonSecurityLinterAnalyzer
+from backend.analyzers.repository_hygiene import RepositoryHygieneAnalyzer
 from backend.analyzers.secret_scanner import SecretScannerAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class AnalyzerRegistry:
         self.register(SecretScannerAnalyzer())
         self.register(DependencyVulnerabilityAnalyzer())
         self.register(PythonSecurityLinterAnalyzer())
+        self.register(RepositoryHygieneAnalyzer())
 
     def register(self, analyzer: BaseAnalyzer) -> None:
         """Register a new analyzer adapter."""

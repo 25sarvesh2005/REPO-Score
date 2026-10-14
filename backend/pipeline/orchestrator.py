@@ -8,6 +8,7 @@ Adheres strictly to EVALUATION_LIFECYCLE.md, Prime Directives #1-#6, and ADR-001
 """
 
 import contextlib
+import os
 import time
 import uuid
 from datetime import UTC, datetime
@@ -194,6 +195,7 @@ class EvaluationPipelineOrchestrator:
             try:
                 tech_stack = {
                     "primary_language": detection.primary_language,
+                    "detected_languages": detection.detected_languages,
                     "frameworks": detection.detected_frameworks,
                     "archetype": detection.evaluator_category.value,
                 }
@@ -273,6 +275,40 @@ class EvaluationPipelineOrchestrator:
             # Persist observations to DB
             self._persist_runtime_observations(session, evaluation_id, runtime_obs)
 
+            # Transform empirical runtime observations into Evidence records
+            runtime_findings = runtime_obs.to_evidence_items()
+            all_evidence.extend(runtime_findings)
+            for rf in runtime_findings:
+                record_finding_metric(
+                    severity=rf.severity.value
+                    if hasattr(rf.severity, "value")
+                    else str(rf.severity),
+                    category=rf.category.value
+                    if hasattr(rf.category, "value")
+                    else str(rf.category),
+                )
+                loc_dict = (
+                    rf.location.model_dump()
+                    if rf.location is not None and hasattr(rf.location, "model_dump")
+                    else (rf.location if isinstance(rf.location, dict) else None)
+                )
+                ev_row = Evidence(
+                    id=uuid.uuid4(),
+                    evaluation_id=evaluation_id,
+                    source=rf.analyzer_id,
+                    category=rf.category,
+                    severity=rf.severity,
+                    confidence=rf.confidence,
+                    fingerprint=rf.fingerprint,
+                    title=rf.title,
+                    description=rf.description,
+                    location=loc_dict,
+                    raw_payload=rf.raw_evidence,
+                    normalized_attributes={},
+                    related_evidence_ids=[],
+                )
+                session.add(ev_row)
+
             if runtime_obs.failure_code in {
                 RuntimeFailureCode.BUILD_FAILURE,
                 RuntimeFailureCode.DEPENDENCY_INSTALL_FAILED,
@@ -326,9 +362,59 @@ class EvaluationPipelineOrchestrator:
                 session, evaluation_id, EvaluationStatus.SCORING, "SCORING"
             )
             try:
+                has_lockfile = False
+                has_readme = False
+                if snapshot_path:
+                    for _root, dirs, files in os.walk(snapshot_path):
+                        dirs[:] = [
+                            d
+                            for d in dirs
+                            if not d.startswith(".") and d not in {"node_modules", "venv", ".venv"}
+                        ]
+                        if any(
+                            f
+                            in {
+                                "poetry.lock",
+                                "Pipfile.lock",
+                                "package-lock.json",
+                                "yarn.lock",
+                                "pnpm-lock.yaml",
+                                "Cargo.lock",
+                                "go.sum",
+                            }
+                            for f in files
+                        ):
+                            has_lockfile = True
+                        if any(f.lower().startswith("readme") for f in files):
+                            has_readme = True
+
+                repo_meta = {
+                    "build_successful": runtime_obs.build_result.success
+                    if (runtime_obs and runtime_obs.build_result)
+                    else False,
+                    "startup_successful": runtime_obs.startup_result.ready
+                    if (runtime_obs and runtime_obs.startup_result)
+                    else False,
+                    "clean_shutdown": getattr(runtime_obs, "clean_shutdown", False),
+                    "tests_passed": runtime_obs.test_metrics.tests_passed
+                    if (runtime_obs and runtime_obs.test_metrics)
+                    else 0,
+                    "tests_failed": runtime_obs.test_metrics.tests_failed
+                    if (runtime_obs and runtime_obs.test_metrics)
+                    else 0,
+                    "line_coverage_percent": runtime_obs.test_metrics.line_coverage_percent
+                    if (runtime_obs and runtime_obs.test_metrics)
+                    else 0.0,
+                    "has_readme": has_readme,
+                    "lockfile_present": has_lockfile,
+                    "ci_cd_detected": ["GitHub Actions"]
+                    if (snapshot_path and (snapshot_path / ".github" / "workflows").exists())
+                    else [],
+                }
                 scorecard = self.scoring_engine.compute_scorecard(
                     evaluation_id=evaluation_id,
                     evidence_records=all_evidence,
+                    repo_metadata=repo_meta,
                     partial_status=partial_status,
                 )
                 await self.scoring_engine.persist_scorecard(session, scorecard)

@@ -43,7 +43,7 @@ def test_clean_repository_perfect_score():
 
 
 def test_clamping_to_zero_under_massive_deductions():
-    engine = DeterministicScoringEngine()
+    engine = DeterministicScoringEngine(enable_quality_gates=False)
     eval_id = uuid.uuid4()
 
     # Generate 10 critical security findings (300 points deduction)
@@ -70,6 +70,34 @@ def test_clamping_to_zero_under_massive_deductions():
     # Overall score reflects the 0.0 on Security (weight 0.16 -> loses 16 points)
     assert scorecard.overall_score == Decimal("84.0")
     assert scorecard.grade == LetterGrade.B
+
+
+def test_critical_security_deduction_applied_deterministically():
+    engine = DeterministicScoringEngine()
+    eval_id = uuid.uuid4()
+
+    findings = [
+        NormalizedFinding(
+            analyzer_id="secret-scanner",
+            tool_version="1.0.0",
+            rule_id="SEC-001-AWS-SECRET-KEY",
+            category=EvidenceCategory.SECURITY,
+            severity=SeverityLevel.CRITICAL,
+            confidence=1.0,
+            title="Plaintext AWS Secret Key",
+            description="High entropy root key",
+        )
+    ]
+
+    scorecard = engine.compute_scorecard(eval_id, evidence_records=findings)
+    sec_dim = scorecard.dimensions[EvidenceCategory.SECURITY.value]
+    # SEC-001 has base deduction 25.0 * 1.0 confidence -> 75.0 score
+    assert sec_dim.score == Decimal("75.0")
+    assert sec_dim.total_deductions == Decimal("25.0")
+    # Verify transparent receipt exists and matches evidence
+    sec_receipts = [r for r in sec_dim.receipt if r.type == "DEDUCTION"]
+    assert len(sec_receipts) == 1
+    assert sec_receipts[0].rule_code == "RULE_SEC_HARDCODED_SECRET"
 
 
 def test_all_receipt_items_have_valid_evidence_attribution():

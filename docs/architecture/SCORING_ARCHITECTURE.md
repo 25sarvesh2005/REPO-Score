@@ -150,3 +150,13 @@ When the score is computed, an itemized receipt is stored in PostgreSQL and deli
 ```
 
 This guarantees that every repository owner understands exactly **why** their project received their score and **what specific lines of code** must be resolved to improve it.
+
+---
+
+## 5. Strict Empirical Auditability & Evidence Traceability (ADR-003)
+
+In accordance with ADR-003, all score calculations are strictly derived from empirical findings:
+1. Every score deduction must cite an authentic `evidence.id` record persisted in the database.
+2. Synthetic score ceilings or arbitrary caps without direct evidence attribution are strictly prohibited.
+3. Repositories are evaluated across static structure (hygiene, documentation, test suites, lockfiles) and dynamic sandbox execution (build, startup, runtime tests, resource consumption), ensuring that all score adjustments reflect verifiable empirical facts.
+

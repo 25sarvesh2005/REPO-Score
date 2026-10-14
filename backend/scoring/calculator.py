@@ -36,8 +36,9 @@ class DeterministicScoringEngine:
     Produces identical bit-for-bit results across repeated runs given identical evidence.
     """
 
-    def __init__(self, version: str = SCORING_VERSION) -> None:
+    def __init__(self, version: str = SCORING_VERSION, enable_quality_gates: bool = True) -> None:
         self.version = version
+        self.enable_quality_gates = enable_quality_gates
 
     def compute_scorecard(
         self,
@@ -228,10 +229,11 @@ class DeterministicScoringEngine:
             composite_accum += spec.weight * final_dim_score
 
         # 5. Composite Overall Score Calculation (SCORE-003)
+        # Bounded mathematically by sum(w_d * S_d) where sum(w_d) == 1.00
         overall_clamped = max(Decimal("0.0"), min(Decimal("100.0"), composite_accum))
         overall_rounded = round_points(overall_clamped)
 
-        # 6. Letter Grade (SCORE-004)
+        # 7. Letter Grade (SCORE-004)
         letter_grade = calculate_letter_grade(overall_rounded)
 
         return ScorecardResult(

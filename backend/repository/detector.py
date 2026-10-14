@@ -291,39 +291,90 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
     detected_entrypoints: list[str] = []
     detected_test_runners: list[str] = []
 
-    # 1. Detect Languages based on manifests & source files
-    for language, manifest_files in LANGUAGE_MANIFEST_SIGNATURES.items():
-        found_manifests = [m for m in manifest_files if (resolved_dir / m).exists()]
-        if found_manifests:
-            # High confidence if official build manifest is present
-            detected_languages[language] = 1.0
+    # 1. Detect Languages based on manifests in root and primary subdirectories
+    search_dirs: list[Path] = [resolved_dir]
+    try:
+        for child in resolved_dir.iterdir():
+            if (
+                child.is_dir()
+                and not child.name.startswith(".")
+                and child.name
+                not in {
+                    "node_modules",
+                    "venv",
+                    ".venv",
+                    ".git",
+                    "dist",
+                    "build",
+                    "target",
+                    "__pycache__",
+                }
+            ):
+                search_dirs.append(child)
+    except Exception:
+        pass
 
-    # 2. Extract Frameworks, Entrypoints, and Tooling
-    if "Python" in detected_languages:
-        py_fw, py_pm, py_ep, py_tr = detect_python_manifests(resolved_dir)
-        detected_frameworks.extend(py_fw)
-        detected_package_managers.extend(py_pm)
-        detected_entrypoints.extend(py_ep)
-        detected_test_runners.extend(py_tr)
+    for s_dir in search_dirs:
+        for language, manifest_files in LANGUAGE_MANIFEST_SIGNATURES.items():
+            found_manifests = [m for m in manifest_files if (s_dir / m).exists()]
+            if found_manifests:
+                detected_languages[language] = 1.0
 
-    if "Node.js" in detected_languages:
-        node_fw, node_pm, node_ep, node_tr = detect_node_manifests(resolved_dir)
-        detected_frameworks.extend(node_fw)
-        detected_package_managers.extend(node_pm)
-        detected_entrypoints.extend(node_ep)
-        detected_test_runners.extend(node_tr)
+    # Fallback to source file extensions if no manifest found
+    if not detected_languages:
+        ext_map = {
+            ".py": "Python",
+            ".js": "Node.js",
+            ".ts": "Node.js",
+            ".go": "Go",
+            ".rs": "Rust",
+            ".java": "Java",
+        }
+        for _root, dirs, files in os.walk(resolved_dir):
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".") and d not in {"node_modules", "venv", ".venv"}
+            ]
+            for f in files:
+                ext = Path(f).suffix.lower()
+                if ext in ext_map:
+                    detected_languages[ext_map[ext]] = 0.8
+            if detected_languages:
+                break
 
-    if "Go" in detected_languages:
-        detected_package_managers.append("go modules")
-        detected_test_runners.append("go test")
-        if (resolved_dir / "main.go").exists():
-            detected_entrypoints.append("main.go")
+    # 2. Extract Frameworks, Entrypoints, and Tooling across search directories
+    for s_dir in search_dirs:
+        rel_prefix = f"{s_dir.name}/" if s_dir != resolved_dir else ""
+        if "Python" in detected_languages:
+            py_fw, py_pm, py_ep, py_tr = detect_python_manifests(s_dir)
+            detected_frameworks.extend(py_fw)
+            detected_package_managers.extend(py_pm)
+            detected_entrypoints.extend(
+                [f"{rel_prefix}{ep}" if not ep.startswith("cli:") else ep for ep in py_ep]
+            )
+            detected_test_runners.extend(py_tr)
 
-    if "Rust" in detected_languages:
-        detected_package_managers.append("cargo")
-        detected_test_runners.append("cargo test")
-        if (resolved_dir / "src" / "main.rs").exists():
-            detected_entrypoints.append("src/main.rs")
+        if "Node.js" in detected_languages:
+            node_fw, node_pm, node_ep, node_tr = detect_node_manifests(s_dir)
+            detected_frameworks.extend(node_fw)
+            detected_package_managers.extend(node_pm)
+            detected_entrypoints.extend(
+                [f"{rel_prefix}{ep}" if not ep.startswith("cli:") else ep for ep in node_ep]
+            )
+            detected_test_runners.extend(node_tr)
+
+        if "Go" in detected_languages:
+            detected_package_managers.append("go modules")
+            detected_test_runners.append("go test")
+            if (s_dir / "main.go").exists():
+                detected_entrypoints.append(f"{rel_prefix}main.go")
+
+        if "Rust" in detected_languages:
+            detected_package_managers.append("cargo")
+            detected_test_runners.append("cargo test")
+            if (s_dir / "src" / "main.rs").exists():
+                detected_entrypoints.append(f"{rel_prefix}src/main.rs")
 
     # Deduplicate lists preserving order
     detected_frameworks = list(dict.fromkeys(detected_frameworks))
@@ -337,7 +388,17 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
     # 3. Primary Language
     primary_language: str | None = None
     if detected_languages:
-        primary_language = max(detected_languages.keys(), key=lambda k: detected_languages[k])
+        # Prioritize language with web/worker framework if multiple exist
+        if "Python" in detected_languages and any(
+            f in {"FastAPI", "Flask", "Django"} for f in detected_frameworks
+        ):
+            primary_language = "Python"
+        elif "Node.js" in detected_languages and any(
+            f in {"Express", "NestJS", "Fastify", "Next.js"} for f in detected_frameworks
+        ):
+            primary_language = "Node.js"
+        else:
+            primary_language = max(detected_languages.keys(), key=lambda k: detected_languages[k])
 
     # 4. Classify Operational Category
     category = EvaluatorCategory.UNSUPPORTED
@@ -358,7 +419,7 @@ def detect_technologies_and_category(snapshot_dir: Path) -> TechnologyDetectionR
         category = EvaluatorCategory.CLI_TOOL
         confidence = 0.90
     elif detected_entrypoints and any(
-        ep in {"main.py", "app.py", "index.js", "index.ts", "main.go", "src/main.rs"}
+        ep.endswith(("main.py", "app.py", "index.js", "index.ts", "main.go", "src/main.rs"))
         for ep in detected_entrypoints
     ):
         # Has an executable entrypoint but no explicit web framework -> default to CLI or daemon

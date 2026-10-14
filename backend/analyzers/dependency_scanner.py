@@ -4,6 +4,7 @@ Statically parses dependency manifests and flags known vulnerable packages.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, TypedDict
@@ -144,7 +145,8 @@ class DependencyVulnerabilityAnalyzer(BaseAnalyzer):
 
     def can_analyze(self, tech_stack: dict[str, Any]) -> bool:
         langs = tech_stack.get("detected_languages", {})
-        return "Python" in langs or "Node.js" in langs
+        primary = tech_stack.get("primary_language", "")
+        return "Python" in langs or "Node.js" in langs or primary in {"Python", "Node.js"}
 
     async def _execute_analysis(
         self,
@@ -154,13 +156,26 @@ class DependencyVulnerabilityAnalyzer(BaseAnalyzer):
         findings: list[NormalizedFinding] = []
         resolved_root = snapshot_path.resolve()
 
-        # Check Python requirements.txt
-        req_file = resolved_root / "requirements.txt"
-        if req_file.exists():
+        req_files: list[Path] = []
+        pkg_files: list[Path] = []
+        for root, dirs, files in os.walk(resolved_root):
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".")
+                and d not in {"node_modules", "venv", ".venv", "build", "dist"}
+            ]
+            if "requirements.txt" in files:
+                req_files.append(Path(root) / "requirements.txt")
+            if "package.json" in files:
+                pkg_files.append(Path(root) / "package.json")
+
+        # Check Python requirements.txt files
+        for req_file in req_files:
             try:
                 content = req_file.read_text(encoding="utf-8", errors="replace")
                 deps = parse_requirements_txt(content)
-                rel_path = "requirements.txt"
+                rel_path = req_file.relative_to(resolved_root).as_posix()
 
                 for pkg_name, ver_str, line_idx in deps:
                     try:
@@ -204,13 +219,12 @@ class DependencyVulnerabilityAnalyzer(BaseAnalyzer):
             except Exception:
                 pass
 
-        # Check Node.js package.json
-        pkg_file = resolved_root / "package.json"
-        if pkg_file.exists():
+        # Check Node.js package.json files
+        for pkg_file in pkg_files:
             try:
                 content = pkg_file.read_text(encoding="utf-8", errors="replace")
                 deps = parse_package_json(content)
-                rel_path = "package.json"
+                rel_path = pkg_file.relative_to(resolved_root).as_posix()
 
                 for pkg_name, ver_str, line_idx in deps:
                     try:
