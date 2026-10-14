@@ -178,3 +178,41 @@ def test_contract_response_conversion():
     assert contract.grade == scorecard.grade
     assert contract.ai_executive_summary == "High quality project"
     assert len(contract.dimensions) == 10
+
+
+def test_bounded_rule_deductions_prevent_dimension_saturation():
+    """
+    Assert that repeated code smell findings are capped at RULE_MAX_CUMULATIVE_DEDUCTIONS (ADR-004)
+    and do not saturate/zero out the entire Maintainability dimension.
+    """
+    engine = DeterministicScoringEngine()
+    eval_id = uuid.uuid4()
+
+    # Generate 50 high complexity findings (would otherwise deduct 50 * 5.0 = 250 points)
+    findings = [
+        NormalizedFinding(
+            analyzer_id="ast-metrics",
+            tool_version="1.0.0",
+            rule_id=f"AST-001-COMPLEXITY-{i}",
+            category=EvidenceCategory.MAINTAINABILITY,
+            severity=SeverityLevel.HIGH,
+            confidence=1.0,
+            title=f"Complex Function {i}",
+            description="Cyclomatic complexity 30",
+        )
+        for i in range(50)
+    ]
+
+    scorecard = engine.compute_scorecard(eval_id, evidence_records=findings)
+    maint_dim = scorecard.dimensions[EvidenceCategory.MAINTAINABILITY.value]
+
+    # Must be capped at exactly 25.0 points deduction
+    assert maint_dim.total_deductions == Decimal("25.0")
+    assert maint_dim.score == Decimal("75.0")
+
+    # Itemized receipt entries must sum to exactly the capped deduction
+    receipt_sum = sum(
+        (abs(item.calculated_delta) for item in maint_dim.receipt if item.type == "DEDUCTION"),
+        Decimal("0.0"),
+    )
+    assert receipt_sum == Decimal("25.0")

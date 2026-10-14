@@ -20,6 +20,25 @@ SEVERITY_MULTIPLIERS: dict[SeverityLevel, Decimal] = {
     SeverityLevel.INFO: Decimal("0.0"),
 }
 
+# Bounded cumulative deduction caps per rule code within a dimension (ADR-004)
+# Protects against saturation distortions where repeated occurrences of minor code smells
+# single-handedly destroy an entire dimension.
+RULE_MAX_CUMULATIVE_DEDUCTIONS: dict[str, Decimal] = {
+    # Maintainability
+    "RULE_MAINT_HIGH_COMPLEXITY": Decimal("25.0"),
+    "RULE_MAINT_LONG_FUNCTION": Decimal("15.0"),
+    "RULE_MAINT_EXCESSIVE_PARAMS": Decimal("10.0"),
+    "RULE_MAINT_LINTER_ERROR": Decimal("15.0"),
+    # Architecture
+    "RULE_ARCH_CIRCULAR_IMPORT": Decimal("30.0"),
+    "RULE_ARCH_GOD_CLASS": Decimal("25.0"),
+    # Dependency Health
+    "RULE_DEP_UNPINNED": Decimal("20.0"),
+    "RULE_DEP_DEPRECATED": Decimal("20.0"),
+    # Documentation
+    "RULE_DOC_MISSING_DOCSTRING": Decimal("15.0"),
+}
+
 
 def round_points(value: Any) -> Decimal:
     """Deterministically quantize points to 1 decimal place."""

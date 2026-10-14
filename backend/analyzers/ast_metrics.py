@@ -57,26 +57,31 @@ class ComplexityVisitor(ast.NodeVisitor):
                 param_count += 1
 
         # Calculate cyclomatic complexity
-        # Base complexity is 1, incremented for each decision point
+        # Base complexity is 1, incremented for each decision point (excluding non-branching context managers)
         complexity = 1
-        for child in ast.walk(node):
+        nodes_to_visit: list[ast.AST] = list(node.body)
+        while nodes_to_visit:
+            curr = nodes_to_visit.pop(0)
+            if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # Do not walk into nested functions; they will be visited separately as their own functions
+                continue
             if isinstance(
-                child,
+                curr,
                 (
                     ast.If,
                     ast.While,
                     ast.For,
                     ast.AsyncFor,
                     ast.ExceptHandler,
-                    ast.With,
-                    ast.AsyncWith,
                     ast.IfExp,
                 ),
             ):
                 complexity += 1
-            elif isinstance(child, ast.BoolOp):
+            elif isinstance(curr, ast.BoolOp):
                 # 'and' or 'or' adds decision branches
-                complexity += len(child.values) - 1
+                complexity += len(curr.values) - 1
+
+            nodes_to_visit.extend(ast.iter_child_nodes(curr))
 
         self.functions.append(
             {
@@ -181,7 +186,7 @@ class AstMetricsAnalyzer(BaseAnalyzer):
 
                 crit_complexity = 35 if is_test_file else 20
                 med_complexity = 25 if is_test_file else 12
-                max_lines = 250 if is_test_file else 120
+                max_lines = 300 if is_test_file else 160
                 max_params = 12 if is_test_file else 7
 
                 for func in visitor.functions:

@@ -18,6 +18,7 @@ from backend.scoring.models import (
     ScorecardResult,
 )
 from backend.scoring.rules import (
+    RULE_MAX_CUMULATIVE_DEDUCTIONS,
     EvidenceAdapter,
     evaluate_evidence_item,
     round_points,
@@ -181,7 +182,41 @@ class DeterministicScoringEngine:
             deductions = dim_deductions[category]
             category_credits = dim_credits[category]
 
-            dim_ded_sum = sum((abs(item.calculated_delta) for item in deductions), Decimal("0.0"))
+            # Enforce bounded cumulative deduction caps per rule code (ADR-004)
+            effective_deductions: list[ReceiptItem] = []
+            rules_grouped: dict[str, list[ReceiptItem]] = {}
+            for item in deductions:
+                rules_grouped.setdefault(item.rule_code, []).append(item)
+
+            dim_ded_sum = Decimal("0.0")
+            for rule_code, items in rules_grouped.items():
+                rule_raw_sum = sum((abs(i.calculated_delta) for i in items), Decimal("0.0"))
+                rule_cap = RULE_MAX_CUMULATIVE_DEDUCTIONS.get(rule_code)
+
+                if (
+                    rule_cap is not None
+                    and rule_raw_sum > rule_cap
+                    and rule_raw_sum > Decimal("0.0")
+                ):
+                    scaling_factor = rule_cap / rule_raw_sum
+                    rule_accum = Decimal("0.0")
+                    for i, item in enumerate(items):
+                        if i == len(items) - 1:
+                            item_scaled = -(rule_cap - rule_accum)
+                        else:
+                            item_scaled = round_points(
+                                -(abs(item.calculated_delta) * scaling_factor)
+                            )
+                            rule_accum += abs(item_scaled)
+
+                        updated_item = item.model_copy(update={"calculated_delta": item_scaled})
+                        effective_deductions.append(updated_item)
+                        dim_ded_sum += abs(item_scaled)
+                else:
+                    for item in items:
+                        effective_deductions.append(item)
+                        dim_ded_sum += abs(item.calculated_delta)
+
             dim_cred_sum = sum((item.calculated_delta for item in category_credits), Decimal("0.0"))
 
             total_all_deductions += dim_ded_sum
@@ -207,7 +242,7 @@ class DeterministicScoringEngine:
                         confidence=1.0,
                         calculated_delta=Decimal("-25.0"),
                     )
-                    deductions.append(incomplete_ded)
+                    effective_deductions.append(incomplete_ded)
                     dim_ded_sum += Decimal("25.0")
                     final_dim_score = max(
                         Decimal("0.0"), round_points(final_dim_score - Decimal("25.0"))
@@ -220,7 +255,7 @@ class DeterministicScoringEngine:
                 base_score=Decimal("100.0"),
                 score=final_dim_score,
                 status=status,
-                receipt=deductions + category_credits,
+                receipt=effective_deductions + category_credits,
                 total_deductions=round_points(dim_ded_sum),
                 total_credits=round_points(dim_cred_sum),
             )
