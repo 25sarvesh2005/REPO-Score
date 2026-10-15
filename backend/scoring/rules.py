@@ -104,9 +104,11 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
     # 2. SECURITY (SCORE-012)
     elif evidence.category == EvidenceCategory.SECURITY:
         if (
-            "SEC-001" in evidence.rule_id
-            or "SEC-002" in evidence.rule_id
-            or "Secret" in evidence.title
+            evidence.rule_id.startswith("SEC-")
+            or "secret" in evidence.title.lower()
+            or "credential" in evidence.title.lower()
+            or "private key" in evidence.title.lower()
+            or "webhook" in evidence.title.lower()
         ):
             rule_code = "RULE_SEC_HARDCODED_SECRET"
             base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("25.0"))

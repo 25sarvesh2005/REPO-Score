@@ -53,6 +53,39 @@ def test_evaluate_hardcoded_secret_rule():
     # Confidence weighting: 25.0 * 0.9 = 22.5
     assert receipt.calculated_delta == Decimal("-22.5")
 
+    # Private key finding (SEC-003)
+    pk_finding = NormalizedFinding(
+        analyzer_id="secret-scanner",
+        tool_version="1.0.0",
+        rule_id="SEC-003-PRIVATE-KEY",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.CRITICAL,
+        confidence=1.0,
+        title="Hardcoded Private Encryption Key",
+        description="RSA Private key block",
+    )
+    pk_receipt = evaluate_evidence_item(EvidenceAdapter(pk_finding))
+    assert pk_receipt is not None
+    assert pk_receipt.rule_code == "RULE_SEC_HARDCODED_SECRET"
+    assert pk_receipt.calculated_delta == Decimal("-25.0")
+
+    # Database URI finding (SEC-004)
+    db_finding = NormalizedFinding(
+        analyzer_id="secret-scanner",
+        tool_version="1.0.0",
+        rule_id="SEC-004-DATABASE-URI",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.HIGH,
+        confidence=0.98,
+        title="Hardcoded Database Connection URI with Credentials",
+        description="Postgres connection string with password",
+    )
+    db_receipt = evaluate_evidence_item(EvidenceAdapter(db_finding))
+    assert db_receipt is not None
+    assert db_receipt.rule_code == "RULE_SEC_HARDCODED_SECRET"
+    assert db_receipt.points == Decimal("15.0")
+    assert db_receipt.calculated_delta == Decimal("-14.7")
+
 
 def test_evaluate_cve_severity_scaling():
     # Critical CVE
