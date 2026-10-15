@@ -47,6 +47,7 @@ SUBSYSTEM_TEST_MAP: dict[str, list[str]] = {
         "tests/unit/test_ast_metrics_analyzer.py",
         "tests/unit/test_dependency_scanner.py",
         "tests/unit/test_python_linter.py",
+        "tests/unit/test_repository_hygiene.py",
         "tests/unit/test_secret_scanner.py",
         "tests/unit/test_normalizer.py",
         "tests/integration/test_analyzer_registry.py",
@@ -72,6 +73,8 @@ SUBSYSTEM_TEST_MAP: dict[str, list[str]] = {
         "tests/integration/test_ai_service.py",
     ],
     "backend/pipeline": [
+        "tests/unit/test_production_hardening.py",
+        "tests/unit/test_hardening_reliability.py",
         "tests/integration/test_pipeline_e2e.py",
         "tests/adversarial/test_adversarial_pipeline.py",
     ],
@@ -87,6 +90,14 @@ SUBSYSTEM_TEST_MAP: dict[str, list[str]] = {
         "tests/unit/test_observability.py",
         "tests/integration/test_correlation_middleware.py",
         "tests/integration/test_health_routes.py",
+    ],
+    "backend/core": [
+        "tests/unit/test_config.py",
+        "tests/unit/test_queue.py",
+        "tests/unit/test_errors.py",
+    ],
+    "scripts": [
+        "tests/unit/test_ci_regression_checker.py",
     ],
 }
 
