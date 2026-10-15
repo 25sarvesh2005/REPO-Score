@@ -204,6 +204,11 @@ class EvaluationStep(TimestampedBase):
 
 
 class ExecutionEnvironment(TimestampedBase):
+    """
+    [Legacy Model] Schema placeholder retained for migration compatibility.
+    Active sandbox telemetry is captured empirically in RuntimeObservation and Evidence.
+    """
+
     __tablename__ = "execution_environments"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
@@ -225,6 +230,11 @@ class ExecutionEnvironment(TimestampedBase):
 
 
 class TestScenario(TimestampedBase):
+    """
+    [Legacy Model] Schema placeholder retained for migration compatibility.
+    Empirical test results are normalized into RuntimeObservation and Evidence.
+    """
+
     __tablename__ = "test_scenarios"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
@@ -261,6 +271,11 @@ class RuntimeObservation(TimestampedBase):
 
 
 class StaticFinding(TimestampedBase):
+    """
+    [Legacy Model] Schema placeholder retained for migration compatibility.
+    All static analyzer findings are unified into the Evidence model.
+    """
+
     __tablename__ = "static_findings"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
@@ -280,6 +295,11 @@ class StaticFinding(TimestampedBase):
 
 
 class SecurityFinding(TimestampedBase):
+    """
+    [Legacy Model] Schema placeholder retained for migration compatibility.
+    All vulnerability findings are unified into the Evidence model.
+    """
+
     __tablename__ = "security_findings"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
@@ -414,6 +434,11 @@ class Recommendation(TimestampedBase):
 
 
 class EvaluationEvent(TimestampedBase):
+    """
+    [Legacy Model] Schema placeholder retained for migration compatibility.
+    Real-time lifecycle events are published via Redis Pub/Sub / In-Memory Queue.
+    """
+
     __tablename__ = "evaluation_events"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(

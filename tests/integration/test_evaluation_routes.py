@@ -401,3 +401,39 @@ def test_get_evaluation_ai_interpretation(mock_db):
     assert data["executive_summary"] == "Solid Python library."
     assert len(data["recommendations"]) == 1
     assert data["recommendations"][0]["title"] == "Add type hints"
+
+
+def test_list_evaluations_includes_score_and_grade(mock_db):
+    eval_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    snap_id = uuid.uuid4()
+
+    ev = Evaluation(
+        id=eval_id,
+        repository_id=repo_id,
+        snapshot_id=snap_id,
+        status=EvaluationStatus.COMPLETED,
+        correlation_id=uuid.uuid4(),
+        trigger_source="API",
+        created_at=datetime.now(UTC),
+    )
+    ev.score = Score(
+        id=uuid.uuid4(),
+        evaluation_id=eval_id,
+        scoring_version="1.0.0",
+        overall_score=Decimal("94.5"),
+        grade="A",
+        created_at=datetime.now(UTC),
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [ev]
+    mock_db.execute.return_value = mock_result
+
+    response = client.get("/api/v1/evaluations")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == str(eval_id)
+    assert data[0]["overall_score"] == "94.5"
+    assert data[0]["grade"] == "A"

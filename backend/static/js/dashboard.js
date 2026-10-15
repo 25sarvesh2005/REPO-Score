@@ -385,10 +385,20 @@
       state.runtimeTelemetry = rtResp.ok ? await rtResp.json() : null;
       state.aiInterpretation = aiResp.ok ? await aiResp.json() : null;
 
+      let repoData = null;
+      if (evalData && evalData.repository_id) {
+        try {
+          const repoResp = await fetch(`/api/v1/repositories/${evalData.repository_id}`);
+          if (repoResp.ok) repoData = await repoResp.json();
+        } catch (_) {
+          // Graceful fallback if repo details fetch fails
+        }
+      }
+
       elements.trackingSection.classList.add('hidden');
       elements.resultsContainer.classList.remove('hidden');
 
-      renderScoreHero(evalData, state.scorecard);
+      renderScoreHero(evalData, state.scorecard, repoData);
       renderDimensionsGrid(state.scorecard);
       renderEvidenceList(state.evidenceItems);
       renderRuntimeTelemetry(state.runtimeTelemetry);
@@ -402,11 +412,37 @@
   /* ==========================================================================
      Hero & Composite Scorecard Rendering
      ========================================================================== */
-  function renderScoreHero(evalRecord, scorecard) {
+  function renderScoreHero(evalRecord, scorecard, repoRecord) {
+    if (repoRecord) {
+      elements.resultRepoHeading.textContent = `${repoRecord.owner} / ${repoRecord.name}`;
+    } else if (evalRecord && evalRecord.repository_id) {
+      elements.resultRepoHeading.textContent = `Repository #${evalRecord.repository_id.slice(0, 8)}`;
+    }
+
+    elements.evalStatusPill.textContent = evalRecord ? evalRecord.status : 'COMPLETED';
+    if (evalRecord && evalRecord.duration_ms) {
+      elements.resultDuration.textContent = `${(evalRecord.duration_ms / 1000).toFixed(1)}s`;
+    } else {
+      elements.resultDuration.textContent = evalRecord ? evalRecord.status : 'Complete';
+    }
+
+    // Failure incident handling
+    const isFailed = evalRecord && ['BUILD_FAILED', 'STARTUP_FAILED', 'FAILED', 'TIMEOUT', 'CANCELLED'].includes(evalRecord.status);
+    if (isFailed) {
+      elements.failureBanner.classList.remove('hidden');
+      elements.failureBannerTitle.textContent = `Evaluation Outcome: ${evalRecord.status}`;
+      elements.failureBannerText.textContent = evalRecord.error_summary || 'Evaluation encountered an error or was interrupted.';
+    } else {
+      elements.failureBanner.classList.add('hidden');
+    }
+
     if (!scorecard) {
       elements.radialScoreNumber.textContent = '0.0';
       elements.compositeGradeBadge.textContent = 'F';
       elements.compositeGradeBadge.className = 'grade-badge grade-F';
+      elements.radialBar.style.strokeDashoffset = 440;
+      elements.statTotalEvidence.textContent = state.evidenceItems.length;
+      elements.statCriticalCount.textContent = state.evidenceItems.filter(e => e.severity === 'CRITICAL').length;
       return;
     }
 
@@ -422,14 +458,6 @@
     elements.compositeGradeBadge.textContent = grade;
     elements.compositeGradeBadge.className = `grade-badge grade-${grade.replace('+', '-plus')}`;
 
-    // Meta details
-    elements.evalStatusPill.textContent = evalRecord ? evalRecord.status : 'COMPLETED';
-    if (evalRecord && evalRecord.duration_ms) {
-      elements.resultDuration.textContent = `${(evalRecord.duration_ms / 1000).toFixed(1)}s`;
-    } else {
-      elements.resultDuration.textContent = 'Complete';
-    }
-
     // Quick Stats
     elements.statTotalEvidence.textContent = state.evidenceItems.length;
     const critCount = state.evidenceItems.filter(e => e.severity === 'CRITICAL').length;
@@ -437,15 +465,6 @@
 
     if (state.runtimeTelemetry) {
       elements.statRuntimeStrategy.textContent = state.runtimeTelemetry.evaluator_strategy.toUpperCase();
-    }
-
-    // Failure incident handling
-    if (evalRecord && (evalRecord.status === 'BUILD_FAILED' || evalRecord.status === 'STARTUP_FAILED')) {
-      elements.failureBanner.classList.remove('hidden');
-      elements.failureBannerTitle.textContent = `Runtime Failure: ${evalRecord.status}`;
-      elements.failureBannerText.textContent = evalRecord.error_summary || 'Compilation or health probes failed.';
-    } else {
-      elements.failureBanner.classList.add('hidden');
     }
   }
 

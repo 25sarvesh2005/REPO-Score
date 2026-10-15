@@ -169,7 +169,13 @@ async def list_evaluations(
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[EvaluationRecordResponse]:
-    stmt = select(Evaluation).order_by(desc(Evaluation.created_at)).limit(limit).offset(offset)
+    stmt = (
+        select(Evaluation)
+        .options(selectinload(Evaluation.score))
+        .order_by(desc(Evaluation.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     if repository_id:
         stmt = stmt.where(Evaluation.repository_id == repository_id)
     if eval_status:
@@ -177,7 +183,16 @@ async def list_evaluations(
 
     result = await session.execute(stmt)
     records = result.scalars().all()
-    return [EvaluationRecordResponse.model_validate(r) for r in records]
+
+    items: list[EvaluationRecordResponse] = []
+    for r in records:
+        resp = EvaluationRecordResponse.model_validate(r)
+        if r.score:
+            resp.overall_score = r.score.overall_score
+            with contextlib.suppress(Exception):
+                resp.grade = LetterGrade(r.score.grade)
+        items.append(resp)
+    return items
 
 
 @router.get(
@@ -190,12 +205,21 @@ async def get_evaluation(
     evaluation_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> EvaluationRecordResponse:
-    stmt = select(Evaluation).where(Evaluation.id == evaluation_id)
+    stmt = (
+        select(Evaluation)
+        .options(selectinload(Evaluation.score))
+        .where(Evaluation.id == evaluation_id)
+    )
     result = await session.execute(stmt)
     evaluation = result.scalar_one_or_none()
     if not evaluation:
         raise EntityNotFoundException(detail=f"Evaluation '{evaluation_id}' was not found.")
-    return EvaluationRecordResponse.model_validate(evaluation)
+    resp = EvaluationRecordResponse.model_validate(evaluation)
+    if evaluation.score:
+        resp.overall_score = evaluation.score.overall_score
+        with contextlib.suppress(Exception):
+            resp.grade = LetterGrade(evaluation.score.grade)
+    return resp
 
 
 @router.get(

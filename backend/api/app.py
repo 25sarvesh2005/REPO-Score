@@ -39,6 +39,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await conn.run_sync(TimestampedBase.metadata.create_all)
         logger.info("SQLite database tables initialized successfully.")
     if settings.REDIS_URL.startswith("memory://"):
+        # Reconcile any orphaned non-terminal evaluations from previous interrupted runs
+        from datetime import UTC, datetime
+
+        from backend.api.schemas.contracts import EvaluationStatus
+        from backend.database.models import Evaluation
+        from backend.database.session import AsyncSessionLocal
+
+        non_terminal = [
+            EvaluationStatus.QUEUED,
+            EvaluationStatus.INGESTING,
+            EvaluationStatus.ANALYZING,
+            EvaluationStatus.BUILDING,
+            EvaluationStatus.STARTING,
+            EvaluationStatus.TESTING,
+            EvaluationStatus.SCORING,
+            EvaluationStatus.AI_INTERPRETATION,
+        ]
+
+        try:
+            async with AsyncSessionLocal() as session:
+                from sqlalchemy import select
+
+                stmt = select(Evaluation).where(Evaluation.status.in_(non_terminal))
+                orphaned = (await session.execute(stmt)).scalars().all()
+                if orphaned:
+                    logger.warning(
+                        f"Reconciling {len(orphaned)} orphaned evaluation(s) from previous run..."
+                    )
+                    for ev in orphaned:
+                        ev.status = EvaluationStatus.FAILED
+                        ev.error_summary = "Evaluation interrupted or orphaned by server restart."
+                        ev.completed_at = datetime.now(UTC)
+                    await session.commit()
+        except Exception as rec_err:
+            logger.warning(f"Failed to reconcile orphaned evaluations: {rec_err}")
+
         # An in-memory queue belongs to this process, so a separate worker process
         # cannot consume it. Local mode runs the same sandboxed orchestrator here.
         from backend.pipeline.worker import EvaluationWorker

@@ -36,7 +36,7 @@ async def test_detect_vulnerable_python_dependency(
 
     f = next(f for f in result.findings if f.rule_id == "CVE-2023-32681")
     assert f.category == EvidenceCategory.DEPENDENCY_HEALTH
-    assert "Upgrade 'requests'" in f.recommendation
+    assert f.recommendation is not None and "Upgrade 'requests'" in f.recommendation
 
 
 @pytest.mark.asyncio

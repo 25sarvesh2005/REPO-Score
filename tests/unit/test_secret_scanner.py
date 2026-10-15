@@ -35,6 +35,7 @@ async def test_detect_hardcoded_github_token(
     assert f.severity == SeverityLevel.CRITICAL
     assert "CWE-798" in f.cwe_ids
     # Snippet must not show the full token in plaintext
+    assert f.location is not None and f.location.snippet is not None
     assert "ghp_111122223333444455556666777788889999" not in f.location.snippet
     assert "ghp_" in f.location.snippet
 

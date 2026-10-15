@@ -116,6 +116,8 @@ class EvaluationRecordResponse(BaseModel):
     completed_at: datetime | None = None
     duration_ms: int | None = None
     error_summary: str | None = None
+    overall_score: Decimal | None = None
+    grade: LetterGrade | None = None
     created_at: datetime
 
 

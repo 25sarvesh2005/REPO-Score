@@ -271,9 +271,11 @@ def main() -> int:
             "",
             "### Output Snippet",
             "```",
-            full_result["output"].strip()[-1000:]
-            if len(full_result["output"]) > 1000
-            else full_result["output"].strip(),
+            (
+                str(full_result.get("output", "")).strip()[-1000:]
+                if len(str(full_result.get("output", ""))) > 1000
+                else str(full_result.get("output", "")).strip()
+            ),
             "```",
         ]
         out_md_p = Path(args.output_md)

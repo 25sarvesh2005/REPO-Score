@@ -80,7 +80,7 @@ def test_adversarial_symlink_pointing_outside_snapshot(tmp_path: Path):
         pytest.skip("Symlink creation not permitted in this OS environment.")
 
     with pytest.raises(SnapshotSecurityError, match="Symlink points outside"):
-        build_snapshot_manifest(repo_dir)
+        build_snapshot_manifest(repo_dir, commit_sha="a" * 40)
 
 
 def test_adversarial_prompt_injection_delimiter_containment():

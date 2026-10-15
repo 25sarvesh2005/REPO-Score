@@ -54,7 +54,10 @@ def deeply_nested_logic(a, b, c, d, e):
     complexity_findings = [f for f in result.findings if "CYCLOMATIC" in f.rule_id]
     assert len(complexity_findings) >= 1
     assert complexity_findings[0].severity in {SeverityLevel.HIGH, SeverityLevel.MEDIUM}
-    assert complexity_findings[0].location.file_path == "complex.py"
+    assert (
+        complexity_findings[0].location is not None
+        and complexity_findings[0].location.file_path == "complex.py"
+    )
 
 
 @pytest.mark.asyncio

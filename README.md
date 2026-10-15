@@ -155,14 +155,11 @@ In a separate terminal:
 python -m backend.pipeline.worker
 ```
 
-### 5. Frontend Dashboard
-In a separate terminal:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) to view the evaluation dashboard.
+### 5. Web Evaluation Dashboard
+The RepoScore interactive evaluation dashboard is hosted directly by the FastAPI gateway:
+Open [http://localhost:8000/](http://localhost:8000/) or [http://localhost:8000/dashboard](http://localhost:8000/dashboard) to view live progress, inspect composite scorecards, and audit itemized evidence receipts.
+
+*(Optional: Typed API client definitions are also available in `frontend/src/` for external client integrations).*
 
 ---
 
