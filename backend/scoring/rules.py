@@ -110,7 +110,11 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
         ):
             rule_code = "RULE_SEC_HARDCODED_SECRET"
             base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("25.0"))
-        elif "DEP-CVE" in evidence.rule_id or "Vulnerability" in evidence.title:
+        elif (
+            "CVE" in evidence.rule_id
+            or "DEP-CVE" in evidence.rule_id
+            or "vulnerab" in evidence.title.lower()
+        ):
             if evidence.severity == SeverityLevel.CRITICAL:
                 rule_code = "RULE_SEC_CRITICAL_CVE"
                 base_points = Decimal("30.0")
@@ -225,6 +229,19 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
         elif "DEPRECATED" in evidence.rule_id:
             rule_code = "RULE_DEP_DEPRECATED"
             base_points = Decimal("10.0")
+        elif "CVE" in evidence.rule_id or "vulnerab" in evidence.title.lower():
+            if evidence.severity == SeverityLevel.CRITICAL:
+                rule_code = "RULE_DEP_CRITICAL_CVE"
+                base_points = Decimal("25.0")
+            elif evidence.severity == SeverityLevel.HIGH:
+                rule_code = "RULE_DEP_HIGH_CVE"
+                base_points = Decimal("15.0")
+            elif evidence.severity == SeverityLevel.MEDIUM:
+                rule_code = "RULE_DEP_MEDIUM_CVE"
+                base_points = Decimal("8.0")
+            else:
+                rule_code = "RULE_DEP_LOW_CVE"
+                base_points = Decimal("3.0")
         else:
             base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("8.0"))
 

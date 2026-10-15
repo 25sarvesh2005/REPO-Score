@@ -182,3 +182,38 @@ def test_evaluate_syntax_parse_error_rule():
     assert receipt.rule_code == "RULE_CORR_SYNTAX_ERROR"
     assert receipt.points == Decimal("10.0")
     assert receipt.calculated_delta == Decimal("-10.0")
+
+
+def test_evaluate_osv_cve_finding_rule():
+    # Direct CVE id from dependency scanner
+    finding = NormalizedFinding(
+        analyzer_id="dependency-vulnerability-scanner",
+        tool_version="1.0.0",
+        rule_id="CVE-2023-32681",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.MEDIUM,
+        confidence=0.99,
+        title="Vulnerable Dependency 'requests' (2.28.1) - CVE-2023-32681",
+        description="Unintended Leak of Proxy-Authorization Header",
+    )
+    receipt = evaluate_evidence_item(EvidenceAdapter(finding))
+    assert receipt is not None
+    assert receipt.rule_code == "RULE_SEC_MEDIUM_CVE"
+    assert receipt.points == Decimal("8.0")
+    assert receipt.calculated_delta == Decimal("-7.9")
+
+    # Dependency Health CVE
+    dep_finding = NormalizedFinding(
+        analyzer_id="dependency-vulnerability-scanner",
+        tool_version="1.0.0",
+        rule_id="CVE-2024-24762",
+        category=EvidenceCategory.DEPENDENCY_HEALTH,
+        severity=SeverityLevel.HIGH,
+        confidence=0.99,
+        title="Vulnerable Dependency 'fastapi' (0.108.0) - CVE-2024-24762",
+        description="ReDoS vulnerability",
+    )
+    dep_receipt = evaluate_evidence_item(EvidenceAdapter(dep_finding))
+    assert dep_receipt is not None
+    assert dep_receipt.rule_code == "RULE_DEP_HIGH_CVE"
+    assert dep_receipt.points == Decimal("15.0")
