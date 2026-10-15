@@ -5,7 +5,9 @@ Empirically assesses documentation presence, test suite existence, CI/CD automat
 and dependency lockfile hygiene without executing untrusted code.
 """
 
+import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +89,7 @@ class RepositoryHygieneAnalyzer(BaseAnalyzer):
         has_tests = False
         has_ci_cd = False
         has_manifest = False
+        first_manifest_rel_path: str | None = None
         has_lockfile = False
         unpinned_deps: list[str] = []
 
@@ -134,6 +137,10 @@ class RepositoryHygieneAnalyzer(BaseAnalyzer):
                 # Manifest check
                 if f in MANIFEST_NAMES:
                     has_manifest = True
+                    manifest_candidate = (Path(root) / f).relative_to(resolved_root).as_posix()
+                    if first_manifest_rel_path is None:
+                        first_manifest_rel_path = manifest_candidate
+
                     # Check for unpinned requirements.txt
                     if f == "requirements.txt":
                         try:
@@ -149,6 +156,20 @@ class RepositoryHygieneAnalyzer(BaseAnalyzer):
                                             .split("~")[0]
                                         )
                                         unpinned_deps.append(pkg)
+                        except Exception:
+                            pass
+                    elif f == "package.json":
+                        try:
+                            content = (Path(root) / f).read_text(encoding="utf-8", errors="replace")
+                            pkg_data = json.loads(content)
+                            deps = {
+                                **pkg_data.get("dependencies", {}),
+                                **pkg_data.get("devDependencies", {}),
+                            }
+                            for dep_name, dep_ver in deps.items():
+                                clean_ver = str(dep_ver).strip()
+                                if clean_ver in {"*", "latest"} or not re.search(r"\d", clean_ver):
+                                    unpinned_deps.append(dep_name)
                         except Exception:
                             pass
 
@@ -211,8 +232,9 @@ class RepositoryHygieneAnalyzer(BaseAnalyzer):
 
         # 4. Unpinned Dependencies or Missing Lockfile Finding
         if has_manifest and (not has_lockfile or unpinned_deps):
+            manifest_display = first_manifest_rel_path or "manifest"
             desc = (
-                "Repository declares dependencies but lacks a deterministic lockfile (e.g. poetry.lock, package-lock.json)."
+                f"Repository declares dependencies in '{manifest_display}' but lacks a deterministic lockfile."
                 if not has_lockfile
                 else f"Repository contains {len(unpinned_deps)} unpinned dependency entries: {', '.join(unpinned_deps[:5])}"
             )
@@ -228,7 +250,9 @@ class RepositoryHygieneAnalyzer(BaseAnalyzer):
                     description=desc,
                     recommendation="Pin all direct dependency versions and commit a deterministic lockfile to guarantee reproducible environments.",
                     location=FindingLocation(
-                        file_path="requirements.txt", start_line=1, end_line=1
+                        file_path=first_manifest_rel_path or "requirements.txt",
+                        start_line=1,
+                        end_line=1,
                     ),
                     raw_evidence={"unpinned_packages": unpinned_deps, "has_lockfile": has_lockfile},
                 )

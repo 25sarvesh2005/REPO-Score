@@ -85,3 +85,32 @@ async def test_hygiene_unpinned_dependencies(tmp_path: Path):
     dep_finding = next(f for f in findings if f.rule_id == "RULE-DEP-UNPINNED")
     assert dep_finding.category == EvidenceCategory.DEPENDENCY_HEALTH
     assert dep_finding.severity == SeverityLevel.MEDIUM
+    assert dep_finding.location is not None
+    assert dep_finding.location.file_path == "requirements.txt"
+
+
+@pytest.mark.asyncio
+async def test_hygiene_package_json_missing_lockfile(tmp_path: Path):
+    (tmp_path / "README.md").write_text(
+        "# Node App\nDetailed description of application...", encoding="utf-8"
+    )
+    (tmp_path / "package.json").write_text(
+        '{"name": "demo", "dependencies": {"express": "^4.18.2"}}', encoding="utf-8"
+    )
+
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+
+    tests_dir = tmp_path / "__tests__"
+    tests_dir.mkdir()
+    (tests_dir / "app.test.js").write_text("test('ok', () => {});\n", encoding="utf-8")
+
+    analyzer = RepositoryHygieneAnalyzer()
+    findings = await analyzer._execute_analysis(tmp_path)
+
+    rule_ids = {f.rule_id for f in findings}
+    assert "RULE-DEP-UNPINNED" in rule_ids
+    dep_finding = next(f for f in findings if f.rule_id == "RULE-DEP-UNPINNED")
+    assert dep_finding.location is not None
+    assert dep_finding.location.file_path == "package.json"

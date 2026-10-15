@@ -131,7 +131,7 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
                 base_points = Decimal("3.0")
         elif "PY-SEC" in evidence.rule_id or "OWASP" in evidence.description:
             rule_code = "RULE_SEC_OWASP_PATTERN"
-            base_points = Decimal("20.0")
+            base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("20.0"))
         else:
             base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("15.0"))
 

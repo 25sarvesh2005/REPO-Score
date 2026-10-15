@@ -250,3 +250,39 @@ def test_evaluate_osv_cve_finding_rule():
     assert dep_receipt is not None
     assert dep_receipt.rule_code == "RULE_DEP_HIGH_CVE"
     assert dep_receipt.points == Decimal("15.0")
+
+
+def test_evaluate_py_sec_severity_scaling():
+    # Critical PY-SEC (e.g. shell=True or unsafe pickle)
+    crit_finding = NormalizedFinding(
+        analyzer_id="python-security-linter",
+        tool_version="1.0.0",
+        rule_id="PY-SEC-SHELL-TRUE",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.CRITICAL,
+        confidence=0.95,
+        title="Subprocess invocation with shell=True",
+        description="Command injection risk",
+    )
+    crit_receipt = evaluate_evidence_item(EvidenceAdapter(crit_finding))
+    assert crit_receipt is not None
+    assert crit_receipt.rule_code == "RULE_SEC_OWASP_PATTERN"
+    assert crit_receipt.points == Decimal("25.0")
+    assert crit_receipt.calculated_delta == Decimal("-23.8")
+
+    # Low PY-SEC (weak hashing)
+    low_finding = NormalizedFinding(
+        analyzer_id="python-security-linter",
+        tool_version="1.0.0",
+        rule_id="PY-SEC-WEAK-HASHING",
+        category=EvidenceCategory.SECURITY,
+        severity=SeverityLevel.LOW,
+        confidence=0.95,
+        title="Use of weak hash algorithm hashlib.md5()",
+        description="MD5 collision risk",
+    )
+    low_receipt = evaluate_evidence_item(EvidenceAdapter(low_finding))
+    assert low_receipt is not None
+    assert low_receipt.rule_code == "RULE_SEC_OWASP_PATTERN"
+    assert low_receipt.points == Decimal("3.0")
+    assert low_receipt.calculated_delta == Decimal("-2.9")
