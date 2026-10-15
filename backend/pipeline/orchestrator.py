@@ -47,7 +47,10 @@ from backend.observability.metrics import (
     record_step_metric,
 )
 from backend.pipeline.models import PipelineExecutionResult, StepExecutionLog, StepStatus
-from backend.repository.detector import detect_technologies_and_category
+from backend.repository.detector import (
+    detect_ci_cd,
+    detect_technologies_and_category,
+)
 from backend.repository.models import TechnologyDetectionResult
 from backend.repository.service import RepositoryIngestionService
 from backend.runtime.dispatcher import RuntimeDispatcher
@@ -376,9 +379,11 @@ class EvaluationPipelineOrchestrator:
                             in {
                                 "poetry.lock",
                                 "Pipfile.lock",
+                                "pdm.lock",
                                 "package-lock.json",
                                 "yarn.lock",
                                 "pnpm-lock.yaml",
+                                "bun.lockb",
                                 "Cargo.lock",
                                 "go.sum",
                             }
@@ -388,6 +393,24 @@ class EvaluationPipelineOrchestrator:
                         if any(f.lower().startswith("readme") for f in files):
                             has_readme = True
 
+                clean_shutdown = bool(
+                    runtime_obs
+                    and (
+                        (
+                            runtime_obs.worker_metrics
+                            and runtime_obs.worker_metrics.clean_sigterm_exit
+                        )
+                        or (runtime_obs.exit_code == 0 and not runtime_obs.failure_code)
+                        or getattr(runtime_obs, "clean_shutdown", False)
+                    )
+                )
+
+                ci_detected = (
+                    detection.detected_ci_cd
+                    if (detection and detection.detected_ci_cd)
+                    else (detect_ci_cd(snapshot_path) if snapshot_path else [])
+                )
+
                 repo_meta = {
                     "build_successful": runtime_obs.build_result.success
                     if (runtime_obs and runtime_obs.build_result)
@@ -395,7 +418,7 @@ class EvaluationPipelineOrchestrator:
                     "startup_successful": runtime_obs.startup_result.ready
                     if (runtime_obs and runtime_obs.startup_result)
                     else False,
-                    "clean_shutdown": getattr(runtime_obs, "clean_shutdown", False),
+                    "clean_shutdown": clean_shutdown,
                     "tests_passed": runtime_obs.test_metrics.tests_passed
                     if (runtime_obs and runtime_obs.test_metrics)
                     else 0,
@@ -407,9 +430,7 @@ class EvaluationPipelineOrchestrator:
                     else 0.0,
                     "has_readme": has_readme,
                     "lockfile_present": has_lockfile,
-                    "ci_cd_detected": ["GitHub Actions"]
-                    if (snapshot_path and (snapshot_path / ".github" / "workflows").exists())
-                    else [],
+                    "ci_cd_detected": ci_detected,
                 }
                 scorecard = self.scoring_engine.compute_scorecard(
                     evaluation_id=evaluation_id,

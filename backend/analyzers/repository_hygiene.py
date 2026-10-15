@@ -37,6 +37,7 @@ TEST_DIR_NAMES = {
 LOCKFILE_NAMES = {
     "poetry.lock",
     "Pipfile.lock",
+    "pdm.lock",
     "package-lock.json",
     "yarn.lock",
     "pnpm-lock.yaml",
