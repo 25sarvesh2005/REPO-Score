@@ -4,11 +4,14 @@ Adheres strictly to docs/api/ENDPOINT_CATALOG.md Section 3.2 & 3.3, RFC 7807 pro
 """
 
 import contextlib
+import json
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -311,6 +314,125 @@ async def cancel_evaluation(
         evaluation_id=evaluation_id,
         status="CANCELLED",
         message="Cancellation signal dispatched to worker.",
+    )
+
+
+@router.get(
+    "/{evaluation_id}/events",
+    summary="Real-Time Lifecycle Event Stream (SSE)",
+    description="Server-Sent Events stream delivering live stage transitions, progress, and terminal completion.",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Active SSE stream emitting event frames.",
+        },
+        404: {"description": "Evaluation record not found."},
+    },
+)
+async def stream_evaluation_events(
+    request: Request,
+    evaluation_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    stmt = (
+        select(Evaluation)
+        .options(selectinload(Evaluation.score))
+        .where(Evaluation.id == evaluation_id)
+    )
+    result = await session.execute(stmt)
+    evaluation = result.scalar_one_or_none()
+    if not evaluation:
+        raise EntityNotFoundException(detail=f"Evaluation '{evaluation_id}' was not found.")
+
+    event_mapping = {
+        "evaluation.lifecycle.started": "state_transition",
+        "evaluation.step.started": "step_started",
+        "evaluation.lifecycle.completed": "evaluation_finished",
+        "evaluation.lifecycle.failed": "evaluation_failed",
+    }
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        # If evaluation has reached a terminal state, emit state transition and terminal frame
+        if evaluation.status in TERMINAL_STATUSES:
+            transition_payload = json.dumps(
+                {
+                    "from_status": evaluation.status.value,
+                    "to_status": evaluation.status.value,
+                    "timestamp": (
+                        evaluation.completed_at or evaluation.created_at or datetime.now(UTC)
+                    ).isoformat(),
+                }
+            )
+            yield f"id: {uuid.uuid4()}\nevent: state_transition\nretry: 3000\ndata: {transition_payload}\n\n"
+
+            if evaluation.status == EvaluationStatus.COMPLETED:
+                score_val = float(evaluation.score.overall_score) if evaluation.score else 0.0
+                grade_val = evaluation.score.grade if evaluation.score else "N/A"
+                finished_payload = json.dumps(
+                    {
+                        "evaluation_id": str(evaluation.id),
+                        "final_status": evaluation.status.value,
+                        "overall_score": score_val,
+                        "grade": grade_val,
+                        "total_duration_ms": evaluation.duration_ms,
+                    }
+                )
+                yield f"id: {uuid.uuid4()}\nevent: evaluation_finished\nretry: 3000\ndata: {finished_payload}\n\n"
+            else:
+                failed_payload = json.dumps(
+                    {
+                        "evaluation_id": str(evaluation.id),
+                        "failure_class": evaluation.status.value,
+                        "error_message": evaluation.error_summary
+                        or f"Evaluation reached terminal status {evaluation.status.value}",
+                        "total_duration_ms": evaluation.duration_ms,
+                    }
+                )
+                yield f"id: {uuid.uuid4()}\nevent: evaluation_failed\nretry: 3000\ndata: {failed_payload}\n\n"
+            return
+
+        # Active evaluation: emit initial state_transition
+        init_payload = json.dumps(
+            {
+                "from_status": evaluation.status.value,
+                "to_status": evaluation.status.value,
+                "timestamp": (
+                    evaluation.started_at or evaluation.created_at or datetime.now(UTC)
+                ).isoformat(),
+            }
+        )
+        yield f"id: {uuid.uuid4()}\nevent: state_transition\nretry: 3000\ndata: {init_payload}\n\n"
+
+        queue = get_job_queue()
+        try:
+            async for item in queue.subscribe_events(evaluation_id, timeout=1.0):
+                if await request.is_disconnected():
+                    break
+
+                if not item:
+                    yield ": ping\n\n"
+                    continue
+
+                raw_event = str(item.get("event", "step_progress"))
+                mapped_event = event_mapping.get(raw_event, raw_event)
+                payload_data = item.get("data", {})
+                serialized = json.dumps(payload_data)
+                yield f"id: {uuid.uuid4()}\nevent: {mapped_event}\nretry: 3000\ndata: {serialized}\n\n"
+
+                if mapped_event in {"evaluation_finished", "evaluation_failed"}:
+                    break
+        except Exception as exc:
+            logger.debug(f"SSE stream closed for {evaluation_id}: {exc}")
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

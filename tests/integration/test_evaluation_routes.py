@@ -437,3 +437,84 @@ def test_list_evaluations_includes_score_and_grade(mock_db):
     assert data[0]["id"] == str(eval_id)
     assert data[0]["overall_score"] == "94.5"
     assert data[0]["grade"] == "A"
+
+
+def test_stream_evaluation_events_not_found(mock_db):
+    eval_id = uuid.uuid4()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    response = client.get(f"/api/v1/evaluations/{eval_id}/events")
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/problem+json"
+
+
+def test_stream_evaluation_events_terminal_completed(mock_db):
+    eval_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    snap_id = uuid.uuid4()
+
+    ev = Evaluation(
+        id=eval_id,
+        repository_id=repo_id,
+        snapshot_id=snap_id,
+        status=EvaluationStatus.COMPLETED,
+        correlation_id=uuid.uuid4(),
+        trigger_source="API",
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+        duration_ms=4500,
+    )
+    ev.score = Score(
+        id=uuid.uuid4(),
+        evaluation_id=eval_id,
+        scoring_version="1.0.0",
+        overall_score=Decimal("88.5"),
+        grade="A",
+        created_at=datetime.now(UTC),
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = ev
+    mock_db.execute.return_value = mock_result
+
+    response = client.get(f"/api/v1/evaluations/{eval_id}/events")
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    text = response.text
+    assert "event: state_transition" in text
+    assert "event: evaluation_finished" in text
+    assert "88.5" in text
+    assert '"grade": "A"' in text
+
+
+def test_stream_evaluation_events_terminal_failed(mock_db):
+    eval_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    snap_id = uuid.uuid4()
+
+    ev = Evaluation(
+        id=eval_id,
+        repository_id=repo_id,
+        snapshot_id=snap_id,
+        status=EvaluationStatus.BUILD_FAILED,
+        correlation_id=uuid.uuid4(),
+        trigger_source="API",
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+        duration_ms=2100,
+        error_summary="Sandbox compilation error",
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = ev
+    mock_db.execute.return_value = mock_result
+
+    response = client.get(f"/api/v1/evaluations/{eval_id}/events")
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    text = response.text
+    assert "event: state_transition" in text
+    assert "event: evaluation_failed" in text
+    assert "Sandbox compilation error" in text

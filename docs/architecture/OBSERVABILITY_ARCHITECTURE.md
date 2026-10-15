@@ -14,7 +14,7 @@ RepoScore implements comprehensive observability across all asynchronous evaluat
 ```mermaid
 graph TD
     subgraph Client ["Client Interface"]
-        UI["Next.js UI (SSE Stream Listener)"]
+        UI["FastAPI Dashboard Client\n(Polling & SSE Listener)"]
     end
 
     subgraph APILayer ["FastAPI Ingress"]
@@ -30,8 +30,8 @@ graph TD
     subgraph ObservabilityStack ["Observability Sinks"]
         LogSink["Structured JSON Logs\n(Secret Sanitized)"]
         PromSink["Prometheus Metrics (/metrics)"]
-        EventSink["PostgreSQL Event Log\n(evaluation_events)"]
-        SSESink["Real-time SSE Stream\n(/evaluations/{id}/events)"]
+        EventSink["Event Bus\n(Redis Pub/Sub / In-Memory Channel)"]
+        SSESink["Real-time SSE Stream\n(/api/v1/evaluations/{id}/events)"]
     end
 
     API -->|1. Generate correlation_id| Queue
@@ -113,7 +113,7 @@ Exposed via `GET /metrics` on the FastAPI server:
 
 ## 5. Live Client Event Streaming (Server-Sent Events)
 
-Clients track real-time progress via Server-Sent Events (`GET /evaluations/{id}/events`):
+Clients track real-time progress via Server-Sent Events (`GET /api/v1/evaluations/{id}/events`):
 
 ```text
 event: step_started

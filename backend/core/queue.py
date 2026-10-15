@@ -3,9 +3,12 @@ Distributed job queue abstraction, Redis implementation, and Dead-Letter Queue (
 Adheres strictly to FAILURE_MODEL.md, ADR-007, and Phase 17 resilience standards.
 """
 
+import asyncio
+import contextlib
 import json
 import uuid
 from abc import abstractmethod
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
@@ -35,6 +38,13 @@ class IJobQueue(Protocol):
         self, evaluation_id: uuid.UUID, event_type: str, data: dict[str, Any]
     ) -> None:
         """Publish real-time event to SSE channel."""
+        ...
+
+    @abstractmethod
+    def subscribe_events(
+        self, evaluation_id: uuid.UUID, timeout: float = 1.0
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Subscribe to real-time events for an evaluation."""
         ...
 
     @abstractmethod
@@ -112,6 +122,30 @@ class RedisJobQueue:
         channel = f"reposcore:events:{evaluation_id}"
         await client.publish(channel, message)
 
+    async def subscribe_events(
+        self, evaluation_id: uuid.UUID, timeout: float = 1.0
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        client = self._get_client()
+        pubsub = client.pubsub()
+        channel = f"reposcore:events:{evaluation_id}"
+        await pubsub.subscribe(channel)
+        try:
+            while True:
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=timeout)
+                if msg and msg.get("type") == "message":
+                    try:
+                        raw = msg.get("data")
+                        if isinstance(raw, (str, bytes, bytearray)):
+                            yield cast(dict[str, Any], json.loads(raw))
+                    except Exception:
+                        pass
+                else:
+                    yield {}
+        finally:
+            with contextlib.suppress(Exception):
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+
     async def is_cancelled(self, evaluation_id: uuid.UUID) -> bool:
         client = self._get_client()
         key = f"reposcore:cancel:{evaluation_id}"
@@ -175,6 +209,23 @@ class InMemoryJobQueue:
         self.published_events.append(
             {"evaluation_id": str(evaluation_id), "event": event_type, "data": data}
         )
+
+    async def subscribe_events(
+        self, evaluation_id: uuid.UUID, timeout: float = 1.0
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        idx = 0
+        eval_str = str(evaluation_id)
+        while True:
+            events_yielded = False
+            while idx < len(self.published_events):
+                event = self.published_events[idx]
+                idx += 1
+                if event.get("evaluation_id") == eval_str:
+                    events_yielded = True
+                    yield {"event": event.get("event"), "data": event.get("data", {})}
+            if not events_yielded:
+                yield {}
+            await asyncio.sleep(timeout)
 
     async def is_cancelled(self, evaluation_id: uuid.UUID) -> bool:
         return str(evaluation_id) in self.cancelled_tokens

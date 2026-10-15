@@ -34,3 +34,28 @@ async def test_in_memory_queue_operations():
 
     # Test health
     assert await queue.check_health() == "connected"
+
+
+@pytest.mark.asyncio
+async def test_in_memory_queue_subscribe_events():
+    queue = InMemoryJobQueue()
+    eval_id = uuid.uuid4()
+
+    await queue.publish_event(eval_id, "step_started", {"step": "INGESTING"})
+    await queue.publish_event(eval_id, "evaluation_finished", {"status": "COMPLETED"})
+
+    events = []
+    gen = queue.subscribe_events(eval_id, timeout=0.01)
+    try:
+        async for item in gen:
+            if not item:
+                break
+            events.append(item)
+            if item.get("event") == "evaluation_finished":
+                break
+    finally:
+        await gen.aclose()
+
+    assert len(events) == 2
+    assert events[0]["event"] == "step_started"
+    assert events[1]["event"] == "evaluation_finished"
