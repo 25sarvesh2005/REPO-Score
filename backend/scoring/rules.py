@@ -151,7 +151,9 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
 
     # 4. TESTING (SCORE-014)
     elif evidence.category == EvidenceCategory.TESTING:
-        if "NO-TESTS" in evidence.rule_id or "Zero test" in evidence.title:
+        if "NO-TEST" in evidence.rule_id or (
+            "zero" in evidence.title.lower() and "test" in evidence.title.lower()
+        ):
             rule_code = "RULE_TEST_NO_TEST_FILES"
             base_points = Decimal("40.0")
         elif "RUN-TEST-001" in evidence.rule_id or "Failed in Repository" in evidence.title:
@@ -187,6 +189,9 @@ def evaluate_evidence_item(evidence: EvidenceAdapter) -> ReceiptItem | None:
         elif "LINT" in evidence.rule_id:
             rule_code = "RULE_MAINT_LINTER_ERROR"
             base_points = Decimal("1.0")
+        elif "SYNTAX" in evidence.rule_id or "Syntax" in evidence.title:
+            rule_code = "RULE_CORR_SYNTAX_ERROR"
+            base_points = Decimal("10.0")
         else:
             base_points = SEVERITY_MULTIPLIERS.get(evidence.severity, Decimal("5.0"))
 

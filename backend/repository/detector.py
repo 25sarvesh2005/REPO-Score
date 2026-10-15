@@ -229,7 +229,7 @@ def detect_node_manifests(snapshot_dir: Path) -> tuple[list[str], list[str], lis
             if parsed.get("bin"):
                 entrypoints.append("package.json:bin")
 
-            if "package_manager" not in package_managers and not package_managers:
+            if not package_managers:
                 package_managers.append("npm")
 
         except Exception:

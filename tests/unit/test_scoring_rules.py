@@ -146,3 +146,39 @@ def test_info_severity_findings_produce_zero_deductions():
     )
     receipt = evaluate_evidence_item(EvidenceAdapter(info_finding))
     assert receipt is None
+
+
+def test_evaluate_missing_test_files_rule():
+    finding = NormalizedFinding(
+        analyzer_id="repository-hygiene",
+        tool_version="1.0.0",
+        rule_id="RULE-TEST-NO-TEST-FILES",
+        category=EvidenceCategory.TESTING,
+        severity=SeverityLevel.HIGH,
+        confidence=1.0,
+        title="Zero Automated Test Files Found",
+        description="No automated unit, integration, or end-to-end test files detected",
+    )
+    receipt = evaluate_evidence_item(EvidenceAdapter(finding))
+    assert receipt is not None
+    assert receipt.rule_code == "RULE_TEST_NO_TEST_FILES"
+    assert receipt.points == Decimal("40.0")
+    assert receipt.calculated_delta == Decimal("-40.0")
+
+
+def test_evaluate_syntax_parse_error_rule():
+    finding = NormalizedFinding(
+        analyzer_id="ast-metrics",
+        tool_version="1.0.0",
+        rule_id="SYNTAX-PARSE-ERROR",
+        category=EvidenceCategory.CORRECTNESS,
+        severity=SeverityLevel.HIGH,
+        confidence=1.0,
+        title="Python Syntax Error in broken.py",
+        description="invalid syntax at line 1",
+    )
+    receipt = evaluate_evidence_item(EvidenceAdapter(finding))
+    assert receipt is not None
+    assert receipt.rule_code == "RULE_CORR_SYNTAX_ERROR"
+    assert receipt.points == Decimal("10.0")
+    assert receipt.calculated_delta == Decimal("-10.0")

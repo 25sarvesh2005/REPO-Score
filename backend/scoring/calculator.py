@@ -37,9 +37,8 @@ class DeterministicScoringEngine:
     Produces identical bit-for-bit results across repeated runs given identical evidence.
     """
 
-    def __init__(self, version: str = SCORING_VERSION, enable_quality_gates: bool = True) -> None:
+    def __init__(self, version: str = SCORING_VERSION) -> None:
         self.version = version
-        self.enable_quality_gates = enable_quality_gates
 
     def compute_scorecard(
         self,

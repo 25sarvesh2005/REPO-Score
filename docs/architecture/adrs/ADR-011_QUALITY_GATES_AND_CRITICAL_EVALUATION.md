@@ -49,7 +49,7 @@ We enforce **Deterministic Quality Gates and Fatal Flaw Guardrails** within the 
 
 ---
 
-## 4. Compliance
+## 4. Compliance & Historical Context
 
-- Implemented in `backend/scoring/quality_gates.py` and `backend/scoring/calculator.py`.
-- Formally verified in `tests/unit/test_scoring_calculator.py`.
+- Historically drafted as hard ceilings, this approach was superseded by ADR-003 and ADR-004 to preserve pure evidence-first mathematical transparency without artificial score cliffs.
+- Deterministic clamping and deduction bounds are verified in `tests/unit/test_scoring_calculator.py`.

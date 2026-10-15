@@ -43,7 +43,7 @@ def test_clean_repository_perfect_score():
 
 
 def test_clamping_to_zero_under_massive_deductions():
-    engine = DeterministicScoringEngine(enable_quality_gates=False)
+    engine = DeterministicScoringEngine()
     eval_id = uuid.uuid4()
 
     # Generate 10 critical security findings (300 points deduction)
